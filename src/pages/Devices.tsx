@@ -26,7 +26,8 @@ const Devices = () => {
     updateDeviceStatus,
     startSession, 
     pauseSession, 
-    stopSession 
+    stopSession,
+    updateSessionCustomerName
   } = useDevicesDB();
   const { isStaffOrAdmin } = useAuth();
   const [filter, setFilter] = useState<DeviceTypeFilter>('all');
@@ -102,6 +103,7 @@ const Devices = () => {
               onStop={stopSession}
               onDelete={isStaffOrAdmin ? deleteDevice : undefined}
               onSetMaintenance={isStaffOrAdmin ? handleSetMaintenance : undefined}
+              onUpdateCustomerName={isStaffOrAdmin ? updateSessionCustomerName : undefined}
               showManageOptions={isStaffOrAdmin}
             />
           </div>
