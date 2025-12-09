@@ -6,6 +6,13 @@ import { Database } from '@/integrations/supabase/types';
 
 type Product = Database['public']['Tables']['products']['Row'];
 
+export interface NewProduct {
+  name: string;
+  price: number;
+  stock: number;
+  category: string;
+}
+
 export function useProducts() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,9 +49,37 @@ export function useProducts() {
     }
   }, [user, gameCenter, fetchProducts]);
 
+  const addProduct = async (product: NewProduct) => {
+    if (!gameCenter?.id) return { success: false };
+
+    try {
+      const { error } = await supabase
+        .from('products')
+        .insert({
+          name: product.name,
+          price: product.price,
+          stock: product.stock,
+          category: product.category,
+          game_center_id: gameCenter.id,
+          is_active: true,
+        });
+
+      if (error) throw error;
+
+      toast.success('محصول با موفقیت اضافه شد');
+      fetchProducts();
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding product:', error);
+      toast.error('خطا در افزودن محصول');
+      return { success: false };
+    }
+  };
+
   const createSale = async (
     items: { productId: string; quantity: number }[],
-    deviceId?: string
+    deviceId?: string,
+    customerName?: string
   ) => {
     if (!gameCenter?.id) return { success: false };
 
@@ -61,6 +96,7 @@ export function useProducts() {
           unit_price: product.price,
           total_price: product.price * item.quantity,
           sold_by: user?.id,
+          customer_name: customerName || null,
         };
       });
 
@@ -94,6 +130,7 @@ export function useProducts() {
   return {
     products,
     loading,
+    addProduct,
     createSale,
     refetch: fetchProducts,
   };

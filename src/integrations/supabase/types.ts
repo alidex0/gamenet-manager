@@ -222,6 +222,7 @@ export type Database = {
       sales: {
         Row: {
           created_at: string
+          customer_name: string | null
           device_id: string | null
           game_center_id: string | null
           id: string
@@ -233,6 +234,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          customer_name?: string | null
           device_id?: string | null
           game_center_id?: string | null
           id?: string
@@ -244,6 +246,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          customer_name?: string | null
           device_id?: string | null
           game_center_id?: string | null
           id?: string
