@@ -32,7 +32,7 @@ const Buffet = () => {
     p.name.includes(searchQuery) || p.category.includes(searchQuery)
   );
 
-  const occupiedDevices = devices.filter(d => d.status === 'occupied');
+  const availableDevices = devices.filter(d => d.status !== 'maintenance');
 
   const addToCart = (productId: string) => {
     setCart(prev => {
@@ -265,14 +265,14 @@ const Buffet = () => {
               {/* Device Selection */}
               {saleType === 'device' && (
                 <div className="mb-4">
-                  {occupiedDevices.length > 0 ? (
+                  {availableDevices.length > 0 ? (
                     <Select value={selectedDevice} onValueChange={setSelectedDevice}>
                       <SelectTrigger className="bg-secondary/50">
                         <SelectValue placeholder="انتخاب دستگاه..." />
                       </SelectTrigger>
                       <SelectContent>
                         <SelectItem value="">بدون دستگاه</SelectItem>
-                        {occupiedDevices.map(device => (
+                        {availableDevices.map(device => (
                           <SelectItem key={device.id} value={device.id}>
                             {device.name}
                             {device.currentSession?.customer_name && (
@@ -286,7 +286,7 @@ const Buffet = () => {
                     </Select>
                   ) : (
                     <p className="text-xs text-muted-foreground text-center py-2">
-                      هیچ دستگاه فعالی وجود ندارد
+                      هیچ دستگاهی وجود ندارد
                     </p>
                   )}
                 </div>
