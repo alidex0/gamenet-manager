@@ -14,22 +14,29 @@ export interface DeviceWithSession extends Device {
 export function useDevicesDB() {
   const [devices, setDevices] = useState<DeviceWithSession[]>([]);
   const [loading, setLoading] = useState(true);
-  const { user } = useAuth();
+  const { user, gameCenter } = useAuth();
 
   const fetchDevices = useCallback(async () => {
+    if (!gameCenter?.id) {
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Fetch devices
+      // Fetch devices for this game center
       const { data: devicesData, error: devicesError } = await supabase
         .from('devices')
         .select('*')
+        .eq('game_center_id', gameCenter.id)
         .order('name');
 
       if (devicesError) throw devicesError;
 
-      // Fetch active sessions (no end_time)
+      // Fetch active sessions (no end_time) for this game center
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('device_sessions')
         .select('*')
+        .eq('game_center_id', gameCenter.id)
         .is('end_time', null);
 
       if (sessionsError) throw sessionsError;
@@ -47,21 +54,24 @@ export function useDevicesDB() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [gameCenter?.id]);
 
   useEffect(() => {
-    if (user) {
+    if (user && gameCenter) {
       fetchDevices();
     }
-  }, [user, fetchDevices]);
+  }, [user, gameCenter, fetchDevices]);
 
   const startSession = async (deviceId: string) => {
+    if (!gameCenter?.id) return;
+
     try {
       // Create new session
       const { error: sessionError } = await supabase
         .from('device_sessions')
         .insert({
           device_id: deviceId,
+          game_center_id: gameCenter.id,
           user_id: user?.id,
           start_time: new Date().toISOString(),
           is_paused: false,
