@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Monitor, Gamepad, Circle, Play, Pause, Square, Wrench, Trash2, MoreVertical, User, Clock, Pencil } from 'lucide-react';
+import { Monitor, Gamepad, Circle, Play, Pause, Square, Wrench, Trash2, MoreVertical, User, Clock, Pencil, Settings } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DeviceWithSession } from '@/hooks/useDevicesDB';
@@ -21,6 +21,7 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
 import { EditCustomerDialog } from '@/components/devices/EditCustomerDialog';
+import { EditDeviceDialog } from '@/components/devices/EditDeviceDialog';
 
 interface InvoiceData {
   deviceName: string;
@@ -49,6 +50,7 @@ interface DeviceCardDBProps {
   onDelete?: (id: string) => void;
   onSetMaintenance?: (id: string) => void;
   onUpdateCustomerName?: (id: string, customerName: string | null) => void;
+  onUpdateDevice?: (id: string, updates: { name?: string; hourly_rate?: number }) => void;
   showManageOptions?: boolean;
   onShowInvoice?: (invoice: InvoiceData) => void;
 }
@@ -77,12 +79,14 @@ export function DeviceCardDB({
   onDelete,
   onSetMaintenance,
   onUpdateCustomerName,
+  onUpdateDevice,
   showManageOptions = false,
   onShowInvoice
 }: DeviceCardDBProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const [showEditCustomerDialog, setShowEditCustomerDialog] = useState(false);
+  const [showEditDeviceDialog, setShowEditDeviceDialog] = useState(false);
   const Icon = deviceIcons[device.type];
 
   const statusConfig = {
@@ -172,7 +176,7 @@ export function DeviceCardDB({
         status.glow
       )}>
         {/* Menu for manage options */}
-        {showManageOptions && device.status !== 'occupied' && (
+        {showManageOptions && (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button 
@@ -183,7 +187,13 @@ export function DeviceCardDB({
                 <MoreVertical className="h-4 w-4" />
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
+            <DropdownMenuContent align="end" className="bg-popover">
+              {onUpdateDevice && (
+                <DropdownMenuItem onClick={() => setShowEditDeviceDialog(true)}>
+                  <Settings className="h-4 w-4 ml-2" />
+                  ویرایش تعرفه
+                </DropdownMenuItem>
+              )}
               {device.status === 'available' && onSetMaintenance && (
                 <DropdownMenuItem onClick={() => onSetMaintenance(device.id)}>
                   <Wrench className="h-4 w-4 ml-2" />
@@ -196,14 +206,18 @@ export function DeviceCardDB({
                   فعال کردن
                 </DropdownMenuItem>
               )}
-              <DropdownMenuSeparator />
-              <DropdownMenuItem 
-                onClick={() => setShowDeleteDialog(true)}
-                className="text-destructive focus:text-destructive"
-              >
-                <Trash2 className="h-4 w-4 ml-2" />
-                حذف دستگاه
-              </DropdownMenuItem>
+              {device.status !== 'occupied' && (
+                <>
+                  <DropdownMenuSeparator />
+                  <DropdownMenuItem 
+                    onClick={() => setShowDeleteDialog(true)}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 ml-2" />
+                    حذف دستگاه
+                  </DropdownMenuItem>
+                </>
+              )}
             </DropdownMenuContent>
           </DropdownMenu>
         )}
@@ -367,6 +381,17 @@ export function DeviceCardDB({
           onOpenChange={setShowEditCustomerDialog}
           currentName={(device.currentSession as any).customer_name}
           onSave={(name) => onUpdateCustomerName(device.id, name)}
+        />
+      )}
+
+      {/* Edit Device Dialog */}
+      {onUpdateDevice && (
+        <EditDeviceDialog
+          open={showEditDeviceDialog}
+          onOpenChange={setShowEditDeviceDialog}
+          deviceName={device.name}
+          hourlyRate={device.hourly_rate}
+          onSave={(name, hourlyRate) => onUpdateDevice(device.id, { name, hourly_rate: hourlyRate })}
         />
       )}
     </>
