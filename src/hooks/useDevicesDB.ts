@@ -215,9 +215,29 @@ export function useDevicesDB() {
     }
   };
 
-  const stopSession = async (deviceId: string) => {
+  const stopSession = async (deviceId: string): Promise<{
+    success: boolean;
+    invoiceData?: {
+      deviceName: string;
+      deviceType: string;
+      customerName: string | null;
+      startTime: Date;
+      endTime: Date;
+      totalSeconds: number;
+      hourlyRate: number;
+      deviceCost: number;
+      buffetSales: Array<{
+        product_name: string;
+        quantity: number;
+        unit_price: number;
+        total_price: number;
+      }>;
+      buffetTotal: number;
+      grandTotal: number;
+    };
+  }> => {
     const device = devices.find(d => d.id === deviceId);
-    if (!device?.currentSession) return;
+    if (!device?.currentSession) return { success: false };
 
     const session = device.currentSession;
 
@@ -234,6 +254,25 @@ export function useDevicesDB() {
       const totalSeconds = Math.floor((endTime.getTime() - startTime.getTime()) / 1000) - totalPausedSeconds;
       const totalHours = totalSeconds / 3600;
       const totalCost = Math.ceil(totalHours * device.hourly_rate);
+
+      // Fetch buffet sales for this device during the session
+      const { data: salesData, error: salesError } = await supabase
+        .from('sales')
+        .select('*, products!sales_product_id_fkey(name)')
+        .eq('device_id', deviceId)
+        .gte('created_at', session.start_time)
+        .lte('created_at', endTime.toISOString());
+
+      if (salesError) throw salesError;
+
+      const buffetSales = (salesData || []).map(sale => ({
+        product_name: (sale.products as any)?.name || 'محصول حذف شده',
+        quantity: sale.quantity,
+        unit_price: sale.unit_price,
+        total_price: sale.total_price,
+      }));
+
+      const buffetTotal = buffetSales.reduce((sum, item) => sum + item.total_price, 0);
 
       const { error: sessionError } = await supabase
         .from('device_sessions')
@@ -255,12 +294,28 @@ export function useDevicesDB() {
 
       if (deviceError) throw deviceError;
 
-      const toPersian = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
-      toast.success(`پایان یافت - هزینه: ${toPersian(totalCost.toLocaleString())} تومان`);
       fetchDevices();
+
+      return {
+        success: true,
+        invoiceData: {
+          deviceName: device.name,
+          deviceType: device.type,
+          customerName: session.customer_name,
+          startTime,
+          endTime,
+          totalSeconds,
+          hourlyRate: device.hourly_rate,
+          deviceCost: totalCost,
+          buffetSales,
+          buffetTotal,
+          grandTotal: totalCost + buffetTotal,
+        },
+      };
     } catch (error) {
       console.error('Error stopping session:', error);
       toast.error('خطا در پایان زمان‌بندی');
+      return { success: false };
     }
   };
 

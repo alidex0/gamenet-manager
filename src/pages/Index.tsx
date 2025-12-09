@@ -1,8 +1,10 @@
+import { useState } from 'react';
 import { Monitor, Users, DollarSign, Coffee, LogOut, Store } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { InvoiceDialog, InvoiceData } from '@/components/devices/InvoiceDialog';
 import { useDevicesDB } from '@/hooks/useDevicesDB';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -11,6 +13,7 @@ import { Loader2 } from 'lucide-react';
 const Index = () => {
   const { devices, loading, startSession, pauseSession, stopSession, getStats } = useDevicesDB();
   const { signOut, user, userRole, gameCenter } = useAuth();
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
   const stats = getStats();
 
   const toPersianNumber = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
@@ -124,6 +127,7 @@ const Index = () => {
                     onStart={startSession}
                     onPause={pauseSession}
                     onStop={stopSession}
+                    onShowInvoice={setInvoiceData}
                   />
                 </div>
               ))}
@@ -136,6 +140,13 @@ const Index = () => {
           <RecentActivity />
         </div>
       </div>
+
+      {/* Invoice Dialog */}
+      <InvoiceDialog
+        open={!!invoiceData}
+        onOpenChange={(open) => !open && setInvoiceData(null)}
+        invoice={invoiceData}
+      />
     </MainLayout>
   );
 };
