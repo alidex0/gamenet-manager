@@ -266,12 +266,12 @@ const Buffet = () => {
               {saleType === 'device' && (
                 <div className="mb-4">
                   {availableDevices.length > 0 ? (
-                    <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+                    <Select value={selectedDevice || "none"} onValueChange={(v) => setSelectedDevice(v === "none" ? "" : v)}>
                       <SelectTrigger className="bg-secondary/50">
                         <SelectValue placeholder="انتخاب دستگاه..." />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="">بدون دستگاه</SelectItem>
+                        <SelectItem value="none">بدون دستگاه</SelectItem>
                         {availableDevices.map(device => (
                           <SelectItem key={device.id} value={device.id}>
                             {device.name}
