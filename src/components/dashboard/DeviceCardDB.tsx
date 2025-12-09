@@ -22,15 +22,35 @@ import {
 } from '@/components/ui/alert-dialog';
 import { EditCustomerDialog } from '@/components/devices/EditCustomerDialog';
 
+interface InvoiceData {
+  deviceName: string;
+  deviceType: string;
+  customerName: string | null;
+  startTime: Date;
+  endTime: Date;
+  totalSeconds: number;
+  hourlyRate: number;
+  deviceCost: number;
+  buffetSales: Array<{
+    product_name: string;
+    quantity: number;
+    unit_price: number;
+    total_price: number;
+  }>;
+  buffetTotal: number;
+  grandTotal: number;
+}
+
 interface DeviceCardDBProps {
   device: DeviceWithSession;
   onStart: (id: string, customerName?: string) => void;
   onPause: (id: string) => void;
-  onStop: (id: string) => void;
+  onStop: (id: string) => Promise<{ success: boolean; invoiceData?: InvoiceData }>;
   onDelete?: (id: string) => void;
   onSetMaintenance?: (id: string) => void;
   onUpdateCustomerName?: (id: string, customerName: string | null) => void;
   showManageOptions?: boolean;
+  onShowInvoice?: (invoice: InvoiceData) => void;
 }
 
 const deviceIcons = {
@@ -57,7 +77,8 @@ export function DeviceCardDB({
   onDelete,
   onSetMaintenance,
   onUpdateCustomerName,
-  showManageOptions = false 
+  showManageOptions = false,
+  onShowInvoice
 }: DeviceCardDBProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
@@ -298,7 +319,12 @@ export function DeviceCardDB({
                 variant="destructive" 
                 size="sm"
                 className="flex-1"
-                onClick={() => onStop(device.id)}
+                onClick={async () => {
+                  const result = await onStop(device.id);
+                  if (result.success && result.invoiceData && onShowInvoice) {
+                    onShowInvoice(result.invoiceData);
+                  }
+                }}
               >
                 <Square className="h-4 w-4" />
                 پایان

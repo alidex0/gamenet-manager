@@ -5,6 +5,7 @@ import { Button } from '@/components/ui/button';
 import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
 import { AddDeviceDialog } from '@/components/devices/AddDeviceDialog';
 import { StartSessionDialog } from '@/components/devices/StartSessionDialog';
+import { InvoiceDialog, InvoiceData } from '@/components/devices/InvoiceDialog';
 import { useDevicesDB, DeviceWithSession } from '@/hooks/useDevicesDB';
 import { useAuth } from '@/contexts/AuthContext';
 
@@ -32,6 +33,7 @@ const Devices = () => {
   const { isStaffOrAdmin } = useAuth();
   const [filter, setFilter] = useState<DeviceTypeFilter>('all');
   const [startDialogDevice, setStartDialogDevice] = useState<DeviceWithSession | null>(null);
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
 
   const filteredDevices = filter === 'all' 
     ? devices 
@@ -105,6 +107,7 @@ const Devices = () => {
               onSetMaintenance={isStaffOrAdmin ? handleSetMaintenance : undefined}
               onUpdateCustomerName={isStaffOrAdmin ? updateSessionCustomerName : undefined}
               showManageOptions={isStaffOrAdmin}
+              onShowInvoice={setInvoiceData}
             />
           </div>
         ))}
@@ -127,6 +130,13 @@ const Devices = () => {
         onOpenChange={(open) => !open && setStartDialogDevice(null)}
         deviceName={startDialogDevice?.name || ''}
         onConfirm={handleStartConfirm}
+      />
+
+      {/* Invoice Dialog */}
+      <InvoiceDialog
+        open={!!invoiceData}
+        onOpenChange={(open) => !open && setInvoiceData(null)}
+        invoice={invoiceData}
       />
     </MainLayout>
   );

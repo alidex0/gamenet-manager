@@ -35,7 +35,7 @@ const Buffet = () => {
     p.name.includes(searchQuery) || p.category.includes(searchQuery)
   );
 
-  const availableDevices = devices.filter(d => d.status !== 'maintenance');
+  const availableDevices = devices.filter(d => d.status === 'occupied');
 
   const addToCart = (productId: string) => {
     setCart(prev => {
