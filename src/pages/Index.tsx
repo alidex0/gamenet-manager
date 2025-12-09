@@ -1,18 +1,57 @@
-import { Monitor, Users, DollarSign, TrendingUp, Coffee, Gamepad, Circle } from 'lucide-react';
+import { Monitor, Users, DollarSign, Coffee, LogOut } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
-import { DeviceCard } from '@/components/dashboard/DeviceCard';
+import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
-import { useDevices } from '@/hooks/useDevices';
+import { useDevicesDB } from '@/hooks/useDevicesDB';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  const { devices, startSession, pauseSession, stopSession, getStats } = useDevices();
+  const { devices, loading, startSession, pauseSession, stopSession, getStats } = useDevicesDB();
+  const { signOut, user, userRole } = useAuth();
   const stats = getStats();
 
   const toPersianNumber = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
 
+  const roleLabels = {
+    admin: 'مدیر',
+    staff: 'کارمند',
+    customer: 'مشتری',
+  };
+
+  if (loading) {
+    return (
+      <MainLayout title="داشبورد" subtitle="در حال بارگذاری...">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
   return (
     <MainLayout title="داشبورد" subtitle="نمای کلی وضعیت گیم نت">
+      {/* User Info Bar */}
+      <div className="glass rounded-xl p-4 mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold">
+            {user?.email?.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="font-medium text-foreground">{user?.email}</p>
+            <p className="text-xs text-muted-foreground">
+              {userRole ? roleLabels[userRole] : 'کاربر'}
+            </p>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
+          <LogOut className="h-4 w-4" />
+          خروج
+        </Button>
+      </div>
+
       {/* Stats Grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
         <StatCard
@@ -21,29 +60,25 @@ const Index = () => {
           subtitle={`از ${toPersianNumber(stats.total)} دستگاه`}
           icon={Monitor}
           variant="primary"
-          trend={{ value: 12, isPositive: true }}
         />
         <StatCard
           title="درآمد امروز"
-          value={`${toPersianNumber(2850000)} ت`}
+          value={`${toPersianNumber(0)} ت`}
           subtitle="تومان"
           icon={DollarSign}
           variant="success"
-          trend={{ value: 8, isPositive: true }}
         />
         <StatCard
           title="فروش بوفه"
-          value={`${toPersianNumber(450000)} ت`}
-          subtitle="۲۳ تراکنش"
+          value={`${toPersianNumber(0)} ت`}
+          subtitle="۰ تراکنش"
           icon={Coffee}
-          trend={{ value: 5, isPositive: true }}
         />
         <StatCard
           title="کاربران آنلاین"
           value={toPersianNumber(stats.occupied)}
           subtitle="کاربر فعال"
           icon={Users}
-          trend={{ value: 3, isPositive: false }}
         />
       </div>
 
@@ -71,7 +106,7 @@ const Index = () => {
           <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
             {devices.map((device, index) => (
               <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
-                <DeviceCard
+                <DeviceCardDB
                   device={device}
                   onStart={startSession}
                   onPause={pauseSession}

@@ -1,13 +1,14 @@
 import { useState } from 'react';
-import { Plus, Filter, Monitor, Gamepad, Circle } from 'lucide-react';
+import { Plus, Filter, Monitor, Gamepad, Circle, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
-import { DeviceCard } from '@/components/dashboard/DeviceCard';
-import { useDevices } from '@/hooks/useDevices';
-import { DeviceType } from '@/types';
+import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
+import { useDevicesDB } from '@/hooks/useDevicesDB';
 import { cn } from '@/lib/utils';
 
-const deviceTypes: { type: DeviceType | 'all'; label: string; icon: typeof Monitor }[] = [
+type DeviceTypeFilter = 'all' | 'pc' | 'playstation' | 'billiard';
+
+const deviceTypes: { type: DeviceTypeFilter; label: string; icon: typeof Monitor }[] = [
   { type: 'all', label: 'همه', icon: Filter },
   { type: 'pc', label: 'کامپیوتر', icon: Monitor },
   { type: 'playstation', label: 'پلی‌استیشن', icon: Gamepad },
@@ -15,12 +16,22 @@ const deviceTypes: { type: DeviceType | 'all'; label: string; icon: typeof Monit
 ];
 
 const Devices = () => {
-  const { devices, startSession, pauseSession, stopSession } = useDevices();
-  const [filter, setFilter] = useState<DeviceType | 'all'>('all');
+  const { devices, loading, startSession, pauseSession, stopSession } = useDevicesDB();
+  const [filter, setFilter] = useState<DeviceTypeFilter>('all');
 
   const filteredDevices = filter === 'all' 
     ? devices 
     : devices.filter(d => d.type === filter);
+
+  if (loading) {
+    return (
+      <MainLayout title="مدیریت دستگاه‌ها" subtitle="در حال بارگذاری...">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="مدیریت دستگاه‌ها" subtitle="نظارت و کنترل دستگاه‌های گیم نت">
@@ -50,7 +61,7 @@ const Devices = () => {
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredDevices.map((device, index) => (
           <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
-            <DeviceCard
+            <DeviceCardDB
               device={device}
               onStart={startSession}
               onPause={pauseSession}
