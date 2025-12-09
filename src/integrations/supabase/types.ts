@@ -19,6 +19,7 @@ export type Database = {
           created_at: string
           device_id: string
           end_time: string | null
+          game_center_id: string | null
           id: string
           is_paused: boolean | null
           paused_at: string | null
@@ -31,6 +32,7 @@ export type Database = {
           created_at?: string
           device_id: string
           end_time?: string | null
+          game_center_id?: string | null
           id?: string
           is_paused?: boolean | null
           paused_at?: string | null
@@ -43,6 +45,7 @@ export type Database = {
           created_at?: string
           device_id?: string
           end_time?: string | null
+          game_center_id?: string | null
           id?: string
           is_paused?: boolean | null
           paused_at?: string | null
@@ -59,11 +62,19 @@ export type Database = {
             referencedRelation: "devices"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "device_sessions_game_center_id_fkey"
+            columns: ["game_center_id"]
+            isOneToOne: false
+            referencedRelation: "game_centers"
+            referencedColumns: ["id"]
+          },
         ]
       }
       devices: {
         Row: {
           created_at: string
+          game_center_id: string | null
           hourly_rate: number
           id: string
           name: string
@@ -73,6 +84,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          game_center_id?: string | null
           hourly_rate?: number
           id?: string
           name: string
@@ -82,11 +94,53 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          game_center_id?: string | null
           hourly_rate?: number
           id?: string
           name?: string
           status?: Database["public"]["Enums"]["device_status"]
           type?: Database["public"]["Enums"]["device_type"]
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "devices_game_center_id_fkey"
+            columns: ["game_center_id"]
+            isOneToOne: false
+            referencedRelation: "game_centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      game_centers: {
+        Row: {
+          address: string | null
+          created_at: string
+          id: string
+          is_active: boolean | null
+          name: string
+          owner_id: string
+          phone: string | null
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          owner_id: string
+          phone?: string | null
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          created_at?: string
+          id?: string
+          is_active?: boolean | null
+          name?: string
+          owner_id?: string
+          phone?: string | null
           updated_at?: string
         }
         Relationships: []
@@ -95,6 +149,7 @@ export type Database = {
         Row: {
           category: string
           created_at: string
+          game_center_id: string | null
           id: string
           is_active: boolean | null
           name: string
@@ -105,6 +160,7 @@ export type Database = {
         Insert: {
           category?: string
           created_at?: string
+          game_center_id?: string | null
           id?: string
           is_active?: boolean | null
           name: string
@@ -115,6 +171,7 @@ export type Database = {
         Update: {
           category?: string
           created_at?: string
+          game_center_id?: string | null
           id?: string
           is_active?: boolean | null
           name?: string
@@ -122,7 +179,15 @@ export type Database = {
           stock?: number
           updated_at?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "products_game_center_id_fkey"
+            columns: ["game_center_id"]
+            isOneToOne: false
+            referencedRelation: "game_centers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       profiles: {
         Row: {
@@ -155,6 +220,7 @@ export type Database = {
         Row: {
           created_at: string
           device_id: string | null
+          game_center_id: string | null
           id: string
           product_id: string | null
           quantity: number
@@ -165,6 +231,7 @@ export type Database = {
         Insert: {
           created_at?: string
           device_id?: string | null
+          game_center_id?: string | null
           id?: string
           product_id?: string | null
           quantity?: number
@@ -175,6 +242,7 @@ export type Database = {
         Update: {
           created_at?: string
           device_id?: string | null
+          game_center_id?: string | null
           id?: string
           product_id?: string | null
           quantity?: number
@@ -191,6 +259,13 @@ export type Database = {
             referencedColumns: ["id"]
           },
           {
+            foreignKeyName: "sales_game_center_id_fkey"
+            columns: ["game_center_id"]
+            isOneToOne: false
+            referencedRelation: "game_centers"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "sales_product_id_fkey"
             columns: ["product_id"]
             isOneToOne: false
@@ -201,27 +276,39 @@ export type Database = {
       }
       user_roles: {
         Row: {
+          game_center_id: string | null
           id: string
           role: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Insert: {
+          game_center_id?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id: string
         }
         Update: {
+          game_center_id?: string | null
           id?: string
           role?: Database["public"]["Enums"]["app_role"]
           user_id?: string
         }
-        Relationships: []
+        Relationships: [
+          {
+            foreignKeyName: "user_roles_game_center_id_fkey"
+            columns: ["game_center_id"]
+            isOneToOne: false
+            referencedRelation: "game_centers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      get_user_game_center_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]
@@ -230,6 +317,10 @@ export type Database = {
         Returns: boolean
       }
       is_staff_or_admin: { Args: { _user_id: string }; Returns: boolean }
+      user_belongs_to_game_center: {
+        Args: { _game_center_id: string; _user_id: string }
+        Returns: boolean
+      }
     }
     Enums: {
       app_role: "admin" | "staff" | "customer"

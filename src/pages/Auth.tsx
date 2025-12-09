@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Gamepad2, Mail, Lock, User, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Gamepad2, Mail, Lock, User, Eye, EyeOff, Loader2, Store } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,8 +13,11 @@ const loginSchema = z.object({
   password: z.string().min(6, 'رمز عبور باید حداقل ۶ کاراکتر باشد'),
 });
 
-const signupSchema = loginSchema.extend({
+const signupSchema = z.object({
+  email: z.string().email('ایمیل معتبر نیست'),
+  password: z.string().min(6, 'رمز عبور باید حداقل ۶ کاراکتر باشد'),
   fullName: z.string().min(2, 'نام باید حداقل ۲ کاراکتر باشد'),
+  gameCenterName: z.string().min(2, 'نام گیم نت باید حداقل ۲ کاراکتر باشد'),
   confirmPassword: z.string(),
 }).refine((data) => data.password === data.confirmPassword, {
   message: 'رمز عبور و تکرار آن مطابقت ندارند',
@@ -30,6 +33,7 @@ const Auth = () => {
     password: '',
     confirmPassword: '',
     fullName: '',
+    gameCenterName: '',
   });
   const [errors, setErrors] = useState<Record<string, string>>({});
 
@@ -87,7 +91,12 @@ const Auth = () => {
           return;
         }
 
-        const { error } = await signUp(formData.email, formData.password, formData.fullName);
+        const { error } = await signUp(
+          formData.email, 
+          formData.password, 
+          formData.fullName,
+          formData.gameCenterName
+        );
         if (error) {
           if (error.message.includes('already registered')) {
             toast.error('این ایمیل قبلاً ثبت شده است');
@@ -95,7 +104,7 @@ const Auth = () => {
             toast.error('خطا در ثبت نام: ' + error.message);
           }
         } else {
-          toast.success('ثبت نام با موفقیت انجام شد');
+          toast.success('ثبت نام با موفقیت انجام شد! گیم نت شما ایجاد شد.');
           navigate('/');
         }
       }
@@ -120,8 +129,10 @@ const Auth = () => {
           <div className="flex h-16 w-16 items-center justify-center rounded-2xl gradient-primary glow mb-4">
             <Gamepad2 className="h-9 w-9 text-primary-foreground" />
           </div>
-          <h1 className="text-2xl font-bold text-foreground">گیم نت</h1>
-          <p className="text-muted-foreground">پنل مدیریت</p>
+          <h1 className="text-2xl font-bold text-foreground">سیستم مدیریت گیم نت</h1>
+          <p className="text-muted-foreground">
+            {isLogin ? 'وارد حساب خود شوید' : 'گیم نت جدید بسازید'}
+          </p>
         </div>
 
         {/* Form Card */}
@@ -139,29 +150,49 @@ const Auth = () => {
               className="flex-1"
               onClick={() => setIsLogin(false)}
             >
-              ثبت نام
+              ثبت گیم نت جدید
             </Button>
           </div>
 
           <form onSubmit={handleSubmit} className="space-y-5">
             {!isLogin && (
-              <div className="space-y-2">
-                <Label htmlFor="fullName">نام و نام خانوادگی</Label>
-                <div className="relative">
-                  <User className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                  <Input
-                    id="fullName"
-                    name="fullName"
-                    placeholder="نام کامل خود را وارد کنید"
-                    value={formData.fullName}
-                    onChange={handleChange}
-                    className="pr-10 bg-secondary/50"
-                  />
+              <>
+                <div className="space-y-2">
+                  <Label htmlFor="gameCenterName">نام گیم نت</Label>
+                  <div className="relative">
+                    <Store className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="gameCenterName"
+                      name="gameCenterName"
+                      placeholder="مثال: گیم نت پارس"
+                      value={formData.gameCenterName}
+                      onChange={handleChange}
+                      className="pr-10 bg-secondary/50"
+                    />
+                  </div>
+                  {errors.gameCenterName && (
+                    <p className="text-xs text-destructive">{errors.gameCenterName}</p>
+                  )}
                 </div>
-                {errors.fullName && (
-                  <p className="text-xs text-destructive">{errors.fullName}</p>
-                )}
-              </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="fullName">نام مدیر</Label>
+                  <div className="relative">
+                    <User className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="fullName"
+                      name="fullName"
+                      placeholder="نام و نام خانوادگی"
+                      value={formData.fullName}
+                      onChange={handleChange}
+                      className="pr-10 bg-secondary/50"
+                    />
+                  </div>
+                  {errors.fullName && (
+                    <p className="text-xs text-destructive">{errors.fullName}</p>
+                  )}
+                </div>
+              </>
             )}
 
             <div className="space-y-2">
@@ -247,15 +278,17 @@ const Auth = () => {
               ) : isLogin ? (
                 'ورود به سیستم'
               ) : (
-                'ثبت نام'
+                'ساخت گیم نت'
               )}
             </Button>
           </form>
         </div>
 
-        <p className="text-center text-sm text-muted-foreground mt-6">
-          اولین کاربر ثبت‌نام شده به عنوان مدیر سیستم تعیین می‌شود
-        </p>
+        {!isLogin && (
+          <p className="text-center text-sm text-muted-foreground mt-6">
+            با ثبت نام، یک گیم نت جدید با ۵ دستگاه و محصولات پیش‌فرض ایجاد می‌شود
+          </p>
+        )}
       </div>
     </div>
   );

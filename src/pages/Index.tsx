@@ -1,4 +1,4 @@
-import { Monitor, Users, DollarSign, Coffee, LogOut } from 'lucide-react';
+import { Monitor, Users, DollarSign, Coffee, LogOut, Store } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { StatCard } from '@/components/dashboard/StatCard';
 import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
@@ -10,7 +10,7 @@ import { Loader2 } from 'lucide-react';
 
 const Index = () => {
   const { devices, loading, startSession, pauseSession, stopSession, getStats } = useDevicesDB();
-  const { signOut, user, userRole } = useAuth();
+  const { signOut, user, userRole, gameCenter } = useAuth();
   const stats = getStats();
 
   const toPersianNumber = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
@@ -32,7 +32,10 @@ const Index = () => {
   }
 
   return (
-    <MainLayout title="داشبورد" subtitle="نمای کلی وضعیت گیم نت">
+    <MainLayout 
+      title={gameCenter?.name || 'داشبورد'} 
+      subtitle="نمای کلی وضعیت گیم نت"
+    >
       {/* User Info Bar */}
       <div className="glass rounded-xl p-4 mb-6 flex items-center justify-between">
         <div className="flex items-center gap-3">
@@ -41,9 +44,12 @@ const Index = () => {
           </div>
           <div>
             <p className="font-medium text-foreground">{user?.email}</p>
-            <p className="text-xs text-muted-foreground">
-              {userRole ? roleLabels[userRole] : 'کاربر'}
-            </p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{userRole ? roleLabels[userRole] : 'کاربر'}</span>
+              <span>•</span>
+              <Store className="h-3 w-3" />
+              <span>{gameCenter?.name}</span>
+            </div>
           </div>
         </div>
         <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
@@ -103,18 +109,26 @@ const Index = () => {
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
-            {devices.map((device, index) => (
-              <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
-                <DeviceCardDB
-                  device={device}
-                  onStart={startSession}
-                  onPause={pauseSession}
-                  onStop={stopSession}
-                />
-              </div>
-            ))}
-          </div>
+          {devices.length === 0 ? (
+            <div className="glass rounded-2xl p-12 text-center">
+              <Monitor className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" />
+              <h3 className="text-lg font-medium text-foreground mb-2">هیچ دستگاهی یافت نشد</h3>
+              <p className="text-sm text-muted-foreground">دستگاه‌های گیم نت در حال بارگذاری...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {devices.map((device, index) => (
+                <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
+                  <DeviceCardDB
+                    device={device}
+                    onStart={startSession}
+                    onPause={pauseSession}
+                    onStop={stopSession}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Activity Feed */}
