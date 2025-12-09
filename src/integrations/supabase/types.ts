@@ -17,6 +17,7 @@ export type Database = {
       device_sessions: {
         Row: {
           created_at: string
+          customer_name: string | null
           device_id: string
           end_time: string | null
           game_center_id: string | null
@@ -30,6 +31,7 @@ export type Database = {
         }
         Insert: {
           created_at?: string
+          customer_name?: string | null
           device_id: string
           end_time?: string | null
           game_center_id?: string | null
@@ -43,6 +45,7 @@ export type Database = {
         }
         Update: {
           created_at?: string
+          customer_name?: string | null
           device_id?: string
           end_time?: string | null
           game_center_id?: string | null

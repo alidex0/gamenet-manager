@@ -4,7 +4,8 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
 import { AddDeviceDialog } from '@/components/devices/AddDeviceDialog';
-import { useDevicesDB } from '@/hooks/useDevicesDB';
+import { StartSessionDialog } from '@/components/devices/StartSessionDialog';
+import { useDevicesDB, DeviceWithSession } from '@/hooks/useDevicesDB';
 import { useAuth } from '@/contexts/AuthContext';
 
 type DeviceTypeFilter = 'all' | 'pc' | 'playstation' | 'billiard';
@@ -29,6 +30,7 @@ const Devices = () => {
   } = useDevicesDB();
   const { isStaffOrAdmin } = useAuth();
   const [filter, setFilter] = useState<DeviceTypeFilter>('all');
+  const [startDialogDevice, setStartDialogDevice] = useState<DeviceWithSession | null>(null);
 
   const filteredDevices = filter === 'all' 
     ? devices 
@@ -39,6 +41,20 @@ const Devices = () => {
     if (device) {
       const newStatus = device.status === 'maintenance' ? 'available' : 'maintenance';
       updateDeviceStatus(deviceId, newStatus);
+    }
+  };
+
+  const handleStartClick = (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    if (device) {
+      setStartDialogDevice(device);
+    }
+  };
+
+  const handleStartConfirm = (customerName?: string) => {
+    if (startDialogDevice) {
+      startSession(startDialogDevice.id, customerName);
+      setStartDialogDevice(null);
     }
   };
 
@@ -81,7 +97,7 @@ const Devices = () => {
           <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
             <DeviceCardDB
               device={device}
-              onStart={startSession}
+              onStart={handleStartClick}
               onPause={pauseSession}
               onStop={stopSession}
               onDelete={isStaffOrAdmin ? deleteDevice : undefined}
@@ -102,6 +118,14 @@ const Devices = () => {
           )}
         </div>
       )}
+
+      {/* Start Session Dialog */}
+      <StartSessionDialog
+        open={!!startDialogDevice}
+        onOpenChange={(open) => !open && setStartDialogDevice(null)}
+        deviceName={startDialogDevice?.name || ''}
+        onConfirm={handleStartConfirm}
+      />
     </MainLayout>
   );
 };

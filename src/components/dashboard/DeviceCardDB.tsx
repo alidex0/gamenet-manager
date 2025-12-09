@@ -1,5 +1,5 @@
-import { useState, useEffect } from 'react';
-import { Monitor, Gamepad, Circle, Play, Pause, Square, Wrench, Trash2, MoreVertical } from 'lucide-react';
+import { useState, useEffect, useMemo } from 'react';
+import { Monitor, Gamepad, Circle, Play, Pause, Square, Wrench, Trash2, MoreVertical, User, Clock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DeviceWithSession } from '@/hooks/useDevicesDB';
@@ -23,7 +23,7 @@ import {
 
 interface DeviceCardDBProps {
   device: DeviceWithSession;
-  onStart: (id: string) => void;
+  onStart: (id: string, customerName?: string) => void;
   onPause: (id: string) => void;
   onStop: (id: string) => void;
   onDelete?: (id: string) => void;
@@ -45,6 +45,8 @@ const deviceLabels = {
   other: 'سایر',
 };
 
+const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
+
 export function DeviceCardDB({ 
   device, 
   onStart, 
@@ -54,7 +56,7 @@ export function DeviceCardDB({
   onSetMaintenance,
   showManageOptions = false 
 }: DeviceCardDBProps) {
-  const [elapsedTime, setElapsedTime] = useState('۰۰:۰۰:۰۰');
+  const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
   const Icon = deviceIcons[device.type];
 
@@ -82,30 +84,53 @@ export function DeviceCardDB({
   const status = statusConfig[device.status];
 
   useEffect(() => {
-    if (device.status !== 'occupied' || !device.currentSession || device.currentSession.is_paused) {
+    if (device.status !== 'occupied' || !device.currentSession) {
+      setElapsedSeconds(0);
+      return;
+    }
+
+    const calculateElapsed = () => {
+      const session = device.currentSession!;
+      const now = new Date();
+      const start = new Date(session.start_time);
+      let pausedSeconds = session.total_paused_seconds || 0;
+      
+      // If currently paused, add time since pause started
+      if (session.is_paused && session.paused_at) {
+        const pausedAt = new Date(session.paused_at);
+        pausedSeconds += Math.floor((now.getTime() - pausedAt.getTime()) / 1000);
+      }
+      
+      const elapsed = Math.floor((now.getTime() - start.getTime()) / 1000) - pausedSeconds;
+      return Math.max(0, elapsed);
+    };
+
+    setElapsedSeconds(calculateElapsed());
+
+    if (device.currentSession.is_paused) {
       return;
     }
 
     const interval = setInterval(() => {
-      const session = device.currentSession!;
-      const now = new Date();
-      const start = new Date(session.start_time);
-      const pausedMs = (session.total_paused_seconds || 0) * 1000;
-      const elapsed = now.getTime() - start.getTime() - pausedMs;
-      
-      const hours = Math.floor(elapsed / 3600000);
-      const minutes = Math.floor((elapsed % 3600000) / 60000);
-      const seconds = Math.floor((elapsed % 60000) / 1000);
-      
-      const toPersian = (n: number) => n.toString().padStart(2, '0').replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
-      
-      setElapsedTime(`${toPersian(hours)}:${toPersian(minutes)}:${toPersian(seconds)}`);
+      setElapsedSeconds(calculateElapsed());
     }, 1000);
 
     return () => clearInterval(interval);
   }, [device]);
 
-  const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
+  // Calculate current cost based on elapsed time
+  const currentCost = useMemo(() => {
+    const hours = elapsedSeconds / 3600;
+    return Math.ceil(hours * device.hourly_rate);
+  }, [elapsedSeconds, device.hourly_rate]);
+
+  // Format elapsed time as compact string
+  const formattedTime = useMemo(() => {
+    const hours = Math.floor(elapsedSeconds / 3600);
+    const minutes = Math.floor((elapsedSeconds % 3600) / 60);
+    const seconds = elapsedSeconds % 60;
+    return `${toPersianNumber(hours.toString().padStart(2, '0'))}:${toPersianNumber(minutes.toString().padStart(2, '0'))}:${toPersianNumber(seconds.toString().padStart(2, '0'))}`;
+  }, [elapsedSeconds]);
 
   const handleDelete = () => {
     if (onDelete) {
@@ -177,19 +202,42 @@ export function DeviceCardDB({
         </div>
 
         {device.status === 'occupied' && device.currentSession && (
-          <div className="mb-4 rounded-lg bg-background/50 p-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs text-muted-foreground">زمان سپری شده</span>
+          <div className="mb-4 space-y-2">
+            {/* Customer name if present */}
+            {(device.currentSession as any).customer_name && (
+              <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                <User className="h-3 w-3" />
+                <span>{(device.currentSession as any).customer_name}</span>
+              </div>
+            )}
+            
+            {/* Cost display - main focus */}
+            <div className="rounded-lg bg-background/50 p-3">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-muted-foreground">هزینه فعلی</span>
+                <span className={cn(
+                  'text-xl font-bold',
+                  device.currentSession.is_paused ? 'text-warning' : 'text-primary glow-text'
+                )}>
+                  {toPersianNumber(currentCost.toLocaleString())} <span className="text-sm">تومان</span>
+                </span>
+              </div>
+            </div>
+            
+            {/* Compact timer */}
+            <div className="flex items-center justify-between text-xs">
+              <div className="flex items-center gap-1 text-muted-foreground">
+                <Clock className="h-3 w-3" />
+                <span>زمان</span>
+              </div>
               <span className={cn(
-                'font-mono text-lg font-bold',
-                device.currentSession.is_paused ? 'text-warning' : 'text-primary glow-text'
+                'font-mono font-medium',
+                device.currentSession.is_paused ? 'text-warning' : 'text-foreground'
               )}>
-                {elapsedTime}
+                {formattedTime}
+                {device.currentSession.is_paused && ' ⏸'}
               </span>
             </div>
-            {device.currentSession.is_paused && (
-              <p className="text-xs text-warning mt-1">⏸ متوقف شده</p>
-            )}
           </div>
         )}
 
