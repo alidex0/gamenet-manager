@@ -120,6 +120,25 @@ export function useDevicesDB() {
     }
   };
 
+  const updateDevice = async (deviceId: string, updates: { name?: string; hourly_rate?: number }) => {
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .update(updates)
+        .eq('id', deviceId);
+
+      if (error) throw error;
+
+      toast.success('اطلاعات دستگاه به‌روز شد');
+      fetchDevices();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating device:', error);
+      toast.error('خطا در به‌روزرسانی دستگاه');
+      return { success: false };
+    }
+  };
+
   const updateDeviceStatus = async (deviceId: string, status: DeviceStatus) => {
     try {
       const { error } = await supabase
@@ -353,6 +372,7 @@ export function useDevicesDB() {
     loading,
     addDevice,
     deleteDevice,
+    updateDevice,
     updateDeviceStatus,
     startSession,
     pauseSession,

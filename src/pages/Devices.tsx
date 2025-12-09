@@ -24,6 +24,7 @@ const Devices = () => {
     loading, 
     addDevice,
     deleteDevice,
+    updateDevice,
     updateDeviceStatus,
     startSession, 
     pauseSession, 
@@ -106,6 +107,7 @@ const Devices = () => {
               onDelete={isStaffOrAdmin ? deleteDevice : undefined}
               onSetMaintenance={isStaffOrAdmin ? handleSetMaintenance : undefined}
               onUpdateCustomerName={isStaffOrAdmin ? updateSessionCustomerName : undefined}
+              onUpdateDevice={isStaffOrAdmin ? updateDevice : undefined}
               showManageOptions={isStaffOrAdmin}
               onShowInvoice={setInvoiceData}
             />
