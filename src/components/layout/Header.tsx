@@ -1,7 +1,7 @@
-import { Bell, Search, User, Package, Clock, Wrench, Check } from 'lucide-react';
+import { Bell, Search, User, Package, Clock, Wrench, Check, Menu } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { useNotifications, Notification } from '@/hooks/useNotifications';
+import { useNotifications } from '@/hooks/useNotifications';
 import { useAuth } from '@/contexts/AuthContext';
 import {
   DropdownMenu,
@@ -15,6 +15,7 @@ import { cn } from '@/lib/utils';
 interface HeaderProps {
   title: string;
   subtitle?: string;
+  onMenuClick?: () => void;
 }
 
 const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
@@ -25,23 +26,35 @@ const notificationIcons = {
   maintenance: { icon: Wrench, color: 'text-muted-foreground' },
 };
 
-export function Header({ title, subtitle }: HeaderProps) {
+export function Header({ title, subtitle, onMenuClick }: HeaderProps) {
   const { notifications, unreadCount, markAsRead, markAllAsRead } = useNotifications();
-  const { user, userRole, gameCenter } = useAuth();
+  const { gameCenter } = useAuth();
 
   const displayName = gameCenter?.name || 'مدیر سیستم';
 
   return (
     <header className="sticky top-0 z-30 border-b border-border bg-background/80 backdrop-blur-xl">
-      <div className="flex h-20 items-center justify-between px-8">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">{title}</h1>
-          {subtitle && (
-            <p className="text-sm text-muted-foreground">{subtitle}</p>
-          )}
+      <div className="flex h-16 md:h-20 items-center justify-between px-4 md:px-8">
+        <div className="flex items-center gap-3">
+          {/* Menu button for mobile */}
+          <Button 
+            variant="ghost" 
+            size="icon" 
+            className="lg:hidden"
+            onClick={onMenuClick}
+          >
+            <Menu className="h-5 w-5" />
+          </Button>
+          
+          <div>
+            <h1 className="text-lg md:text-2xl font-bold text-foreground">{title}</h1>
+            {subtitle && (
+              <p className="text-xs md:text-sm text-muted-foreground hidden sm:block">{subtitle}</p>
+            )}
+          </div>
         </div>
 
-        <div className="flex items-center gap-4">
+        <div className="flex items-center gap-2 md:gap-4">
           {/* Search */}
           <div className="relative hidden md:block">
             <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -63,7 +76,7 @@ export function Header({ title, subtitle }: HeaderProps) {
                 )}
               </Button>
             </DropdownMenuTrigger>
-            <DropdownMenuContent align="end" className="w-80">
+            <DropdownMenuContent align="end" className="w-80 bg-popover">
               <div className="flex items-center justify-between px-3 py-2">
                 <span className="font-bold text-foreground">اعلان‌ها</span>
                 {unreadCount > 0 && (
@@ -126,9 +139,12 @@ export function Header({ title, subtitle }: HeaderProps) {
           </DropdownMenu>
 
           {/* User */}
-          <Button variant="glass" className="gap-2">
+          <Button variant="glass" className="gap-2 hidden sm:flex">
             <User className="h-4 w-4" />
             <span>{displayName}</span>
+          </Button>
+          <Button variant="ghost" size="icon" className="sm:hidden">
+            <User className="h-5 w-5" />
           </Button>
         </div>
       </div>
