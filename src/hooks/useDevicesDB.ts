@@ -6,9 +6,17 @@ import { Database } from '@/integrations/supabase/types';
 
 type Device = Database['public']['Tables']['devices']['Row'];
 type DeviceSession = Database['public']['Tables']['device_sessions']['Row'];
+type DeviceType = Database['public']['Enums']['device_type'];
+type DeviceStatus = Database['public']['Enums']['device_status'];
 
 export interface DeviceWithSession extends Device {
   currentSession?: DeviceSession | null;
+}
+
+export interface NewDevice {
+  name: string;
+  type: DeviceType;
+  hourly_rate: number;
 }
 
 export function useDevicesDB() {
@@ -23,7 +31,6 @@ export function useDevicesDB() {
     }
 
     try {
-      // Fetch devices for this game center
       const { data: devicesData, error: devicesError } = await supabase
         .from('devices')
         .select('*')
@@ -32,7 +39,6 @@ export function useDevicesDB() {
 
       if (devicesError) throw devicesError;
 
-      // Fetch active sessions (no end_time) for this game center
       const { data: sessionsData, error: sessionsError } = await supabase
         .from('device_sessions')
         .select('*')
@@ -41,7 +47,6 @@ export function useDevicesDB() {
 
       if (sessionsError) throw sessionsError;
 
-      // Combine devices with their active sessions
       const devicesWithSessions: DeviceWithSession[] = (devicesData || []).map(device => ({
         ...device,
         currentSession: sessionsData?.find(s => s.device_id === device.id) || null,
@@ -62,11 +67,82 @@ export function useDevicesDB() {
     }
   }, [user, gameCenter, fetchDevices]);
 
+  const addDevice = async (newDevice: NewDevice) => {
+    if (!gameCenter?.id) return { success: false };
+
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .insert({
+          name: newDevice.name,
+          type: newDevice.type,
+          hourly_rate: newDevice.hourly_rate,
+          status: 'available' as DeviceStatus,
+          game_center_id: gameCenter.id,
+        });
+
+      if (error) throw error;
+
+      toast.success('دستگاه با موفقیت اضافه شد');
+      fetchDevices();
+      return { success: true };
+    } catch (error) {
+      console.error('Error adding device:', error);
+      toast.error('خطا در افزودن دستگاه');
+      return { success: false };
+    }
+  };
+
+  const deleteDevice = async (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    if (!device) return { success: false };
+
+    if (device.status === 'occupied') {
+      toast.error('امکان حذف دستگاه مشغول وجود ندارد');
+      return { success: false };
+    }
+
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .delete()
+        .eq('id', deviceId);
+
+      if (error) throw error;
+
+      toast.success('دستگاه با موفقیت حذف شد');
+      fetchDevices();
+      return { success: true };
+    } catch (error) {
+      console.error('Error deleting device:', error);
+      toast.error('خطا در حذف دستگاه');
+      return { success: false };
+    }
+  };
+
+  const updateDeviceStatus = async (deviceId: string, status: DeviceStatus) => {
+    try {
+      const { error } = await supabase
+        .from('devices')
+        .update({ status })
+        .eq('id', deviceId);
+
+      if (error) throw error;
+
+      toast.success('وضعیت دستگاه به‌روز شد');
+      fetchDevices();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating device status:', error);
+      toast.error('خطا در به‌روزرسانی وضعیت');
+      return { success: false };
+    }
+  };
+
   const startSession = async (deviceId: string) => {
     if (!gameCenter?.id) return;
 
     try {
-      // Create new session
       const { error: sessionError } = await supabase
         .from('device_sessions')
         .insert({
@@ -80,10 +156,9 @@ export function useDevicesDB() {
 
       if (sessionError) throw sessionError;
 
-      // Update device status
       const { error: deviceError } = await supabase
         .from('devices')
-        .update({ status: 'occupied' as const })
+        .update({ status: 'occupied' as DeviceStatus })
         .eq('id', deviceId);
 
       if (deviceError) throw deviceError;
@@ -104,7 +179,6 @@ export function useDevicesDB() {
 
     try {
       if (session.is_paused) {
-        // Resume - calculate additional paused time
         const pausedAt = new Date(session.paused_at!);
         const now = new Date();
         const additionalPausedSeconds = Math.floor((now.getTime() - pausedAt.getTime()) / 1000);
@@ -121,7 +195,6 @@ export function useDevicesDB() {
         if (error) throw error;
         toast.success('زمان‌بندی ادامه یافت');
       } else {
-        // Pause
         const { error } = await supabase
           .from('device_sessions')
           .update({
@@ -148,12 +221,10 @@ export function useDevicesDB() {
     const session = device.currentSession;
 
     try {
-      // Calculate total cost
       const startTime = new Date(session.start_time);
       const endTime = new Date();
       let totalPausedSeconds = session.total_paused_seconds || 0;
       
-      // If currently paused, add current pause duration
       if (session.is_paused && session.paused_at) {
         const pausedAt = new Date(session.paused_at);
         totalPausedSeconds += Math.floor((endTime.getTime() - pausedAt.getTime()) / 1000);
@@ -163,7 +234,6 @@ export function useDevicesDB() {
       const totalHours = totalSeconds / 3600;
       const totalCost = Math.ceil(totalHours * device.hourly_rate);
 
-      // Update session with end time and cost
       const { error: sessionError } = await supabase
         .from('device_sessions')
         .update({
@@ -177,10 +247,9 @@ export function useDevicesDB() {
 
       if (sessionError) throw sessionError;
 
-      // Update device status
       const { error: deviceError } = await supabase
         .from('devices')
-        .update({ status: 'available' as const })
+        .update({ status: 'available' as DeviceStatus })
         .eq('id', deviceId);
 
       if (deviceError) throw deviceError;
@@ -204,6 +273,9 @@ export function useDevicesDB() {
   return {
     devices,
     loading,
+    addDevice,
+    deleteDevice,
+    updateDeviceStatus,
     startSession,
     pauseSession,
     stopSession,
