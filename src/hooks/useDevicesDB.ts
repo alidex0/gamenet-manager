@@ -175,7 +175,7 @@ export function useDevicesDB() {
 
       if (deviceError) throw deviceError;
 
-      const toPersian = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
+      const toPersian = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
       toast.success(`پایان یافت - هزینه: ${toPersian(totalCost.toLocaleString())} تومان`);
       fetchDevices();
     } catch (error) {
