@@ -264,6 +264,28 @@ export function useDevicesDB() {
     }
   };
 
+  const updateSessionCustomerName = async (deviceId: string, customerName: string | null) => {
+    const device = devices.find(d => d.id === deviceId);
+    if (!device?.currentSession) return { success: false };
+
+    try {
+      const { error } = await supabase
+        .from('device_sessions')
+        .update({ customer_name: customerName })
+        .eq('id', device.currentSession.id);
+
+      if (error) throw error;
+
+      toast.success('نام مشتری به‌روز شد');
+      fetchDevices();
+      return { success: true };
+    } catch (error) {
+      console.error('Error updating customer name:', error);
+      toast.error('خطا در به‌روزرسانی نام مشتری');
+      return { success: false };
+    }
+  };
+
   const getStats = () => {
     const available = devices.filter(d => d.status === 'available').length;
     const occupied = devices.filter(d => d.status === 'occupied').length;
@@ -280,6 +302,7 @@ export function useDevicesDB() {
     startSession,
     pauseSession,
     stopSession,
+    updateSessionCustomerName,
     getStats,
     refetch: fetchDevices,
   };

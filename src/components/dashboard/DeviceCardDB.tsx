@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Monitor, Gamepad, Circle, Play, Pause, Square, Wrench, Trash2, MoreVertical, User, Clock } from 'lucide-react';
+import { Monitor, Gamepad, Circle, Play, Pause, Square, Wrench, Trash2, MoreVertical, User, Clock, Pencil } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { cn } from '@/lib/utils';
 import { DeviceWithSession } from '@/hooks/useDevicesDB';
@@ -20,6 +20,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog';
+import { EditCustomerDialog } from '@/components/devices/EditCustomerDialog';
 
 interface DeviceCardDBProps {
   device: DeviceWithSession;
@@ -28,6 +29,7 @@ interface DeviceCardDBProps {
   onStop: (id: string) => void;
   onDelete?: (id: string) => void;
   onSetMaintenance?: (id: string) => void;
+  onUpdateCustomerName?: (id: string, customerName: string | null) => void;
   showManageOptions?: boolean;
 }
 
@@ -54,10 +56,12 @@ export function DeviceCardDB({
   onStop, 
   onDelete,
   onSetMaintenance,
+  onUpdateCustomerName,
   showManageOptions = false 
 }: DeviceCardDBProps) {
   const [elapsedSeconds, setElapsedSeconds] = useState(0);
   const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showEditCustomerDialog, setShowEditCustomerDialog] = useState(false);
   const Icon = deviceIcons[device.type];
 
   const statusConfig = {
@@ -204,12 +208,22 @@ export function DeviceCardDB({
         {device.status === 'occupied' && device.currentSession && (
           <div className="mb-4 space-y-2">
             {/* Customer name if present */}
-            {(device.currentSession as any).customer_name && (
+            <div className="flex items-center justify-between">
               <div className="flex items-center gap-2 text-xs text-muted-foreground">
                 <User className="h-3 w-3" />
-                <span>{(device.currentSession as any).customer_name}</span>
+                <span>{(device.currentSession as any).customer_name || 'بدون نام'}</span>
               </div>
-            )}
+              {onUpdateCustomerName && (
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-6 w-6"
+                  onClick={() => setShowEditCustomerDialog(true)}
+                >
+                  <Pencil className="h-3 w-3" />
+                </Button>
+              )}
+            </div>
             
             {/* Cost display - main focus */}
             <div className="rounded-lg bg-background/50 p-3">
@@ -320,6 +334,15 @@ export function DeviceCardDB({
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+      {/* Edit Customer Dialog */}
+      {device.currentSession && onUpdateCustomerName && (
+        <EditCustomerDialog
+          open={showEditCustomerDialog}
+          onOpenChange={setShowEditCustomerDialog}
+          currentName={(device.currentSession as any).customer_name}
+          onSave={(name) => onUpdateCustomerName(device.id, name)}
+        />
+      )}
     </>
   );
 }
