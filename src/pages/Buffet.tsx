@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Search, Package, ShoppingCart, Loader2, User, Monitor, Trash2, Minus, Plus } from 'lucide-react';
+import { Search, Package, ShoppingCart, Loader2, User, Monitor, Trash2, Minus, Plus, History, Clock } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/useProducts';
 import { useDevicesDB } from '@/hooks/useDevicesDB';
+import { useSalesHistory } from '@/hooks/useSalesHistory';
 import { AddProductDialog } from '@/components/buffet/AddProductDialog';
 import { useAuth } from '@/contexts/AuthContext';
 import {
@@ -15,11 +16,12 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from '@/components/ui/tabs';
 
 const Buffet = () => {
   const { products, loading, createSale, addProduct } = useProducts();
   const { devices } = useDevicesDB();
+  const { sales, loading: salesLoading } = useSalesHistory();
   const { isStaffOrAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<{ productId: string; quantity: number }[]>([]);
@@ -27,6 +29,7 @@ const Buffet = () => {
   const [customerName, setCustomerName] = useState('');
   const [saleType, setSaleType] = useState<'device' | 'customer'>('device');
   const [submitting, setSubmitting] = useState(false);
+  const [activeTab, setActiveTab] = useState<'products' | 'history'>('products');
 
   const filteredProducts = products.filter(p => 
     p.name.includes(searchQuery) || p.category.includes(searchQuery)
@@ -89,6 +92,22 @@ const Buffet = () => {
 
   const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
 
+  const formatTime = (dateStr: string) => {
+    const date = new Date(dateStr);
+    const now = new Date();
+    const diffMs = now.getTime() - date.getTime();
+    const diffMins = Math.floor(diffMs / 60000);
+    const diffHours = Math.floor(diffMins / 60);
+    const diffDays = Math.floor(diffHours / 24);
+
+    if (diffMins < 1) return 'همین الان';
+    if (diffMins < 60) return `${toPersianNumber(diffMins)} دقیقه پیش`;
+    if (diffHours < 24) return `${toPersianNumber(diffHours)} ساعت پیش`;
+    if (diffDays < 7) return `${toPersianNumber(diffDays)} روز پیش`;
+    
+    return date.toLocaleDateString('fa-IR');
+  };
+
   if (loading) {
     return (
       <MainLayout title="مدیریت بوفه" subtitle="در حال بارگذاری...">
@@ -102,68 +121,145 @@ const Buffet = () => {
   return (
     <MainLayout title="مدیریت بوفه" subtitle="محصولات و فروش">
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        {/* Products */}
+        {/* Products & History */}
         <div className="lg:col-span-2">
-          <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
-            <div className="relative flex-1 max-w-sm">
-              <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-              <Input
-                placeholder="جستجوی محصول..."
-                value={searchQuery}
-                onChange={(e) => setSearchQuery(e.target.value)}
-                className="pr-10 bg-secondary/50"
-              />
-            </div>
-            {isStaffOrAdmin && (
-              <AddProductDialog onAdd={addProduct} />
-            )}
-          </div>
-
-          {filteredProducts.length === 0 ? (
-            <div className="flex flex-col items-center justify-center py-20 text-center">
-              <Package className="h-16 w-16 text-muted-foreground/30 mb-4" />
-              <h3 className="text-lg font-medium text-foreground mb-2">محصولی یافت نشد</h3>
-              <p className="text-sm text-muted-foreground mb-4">محصول جدید اضافه کنید.</p>
-              {isStaffOrAdmin && (
-                <AddProductDialog onAdd={addProduct} />
+          <Tabs value={activeTab} onValueChange={(v) => setActiveTab(v as 'products' | 'history')}>
+            <div className="flex flex-wrap items-center justify-between gap-4 mb-6">
+              <TabsList>
+                <TabsTrigger value="products" className="gap-2">
+                  <Package className="h-4 w-4" />
+                  محصولات
+                </TabsTrigger>
+                <TabsTrigger value="history" className="gap-2">
+                  <History className="h-4 w-4" />
+                  تاریخچه فروش
+                </TabsTrigger>
+              </TabsList>
+              
+              {activeTab === 'products' && (
+                <div className="flex items-center gap-4">
+                  <div className="relative flex-1 max-w-sm">
+                    <Search className="absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+                    <Input
+                      placeholder="جستجوی محصول..."
+                      value={searchQuery}
+                      onChange={(e) => setSearchQuery(e.target.value)}
+                      className="pr-10 bg-secondary/50"
+                    />
+                  </div>
+                  {isStaffOrAdmin && (
+                    <AddProductDialog onAdd={addProduct} />
+                  )}
+                </div>
               )}
             </div>
-          ) : (
-            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
-              {filteredProducts.map((product, index) => (
-                <button
-                  key={product.id}
-                  onClick={() => addToCart(product.id)}
-                  disabled={product.stock <= 0}
-                  className={cn(
-                    'glass glass-hover rounded-xl p-4 text-right transition-all duration-300 animate-fade-in',
-                    product.stock > 0 
-                      ? 'hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98]'
-                      : 'opacity-50 cursor-not-allowed'
+
+            <TabsContent value="products" className="mt-0">
+              {filteredProducts.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <Package className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">محصولی یافت نشد</h3>
+                  <p className="text-sm text-muted-foreground mb-4">محصول جدید اضافه کنید.</p>
+                  {isStaffOrAdmin && (
+                    <AddProductDialog onAdd={addProduct} />
                   )}
-                  style={{ animationDelay: `${index * 0.05}s` }}
-                >
-                  <div className="flex items-center justify-center h-16 w-16 mx-auto mb-3 rounded-xl bg-secondary">
-                    <Package className="h-8 w-8 text-primary" />
-                  </div>
-                  <h3 className="font-medium text-foreground mb-1">{product.name}</h3>
-                  <p className="text-xs text-muted-foreground mb-2">{product.category}</p>
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm font-bold text-primary">
-                      {toPersianNumber(product.price.toLocaleString())} ت
-                    </span>
-                    <span className={cn(
-                      'text-xs',
-                      product.stock < 10 ? 'text-warning' : 'text-muted-foreground',
-                      product.stock <= 0 && 'text-destructive'
-                    )}>
-                      {product.stock <= 0 ? 'ناموجود' : `${toPersianNumber(product.stock)} عدد`}
-                    </span>
-                  </div>
-                </button>
-              ))}
-            </div>
-          )}
+                </div>
+              ) : (
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {filteredProducts.map((product, index) => (
+                    <button
+                      key={product.id}
+                      onClick={() => addToCart(product.id)}
+                      disabled={product.stock <= 0}
+                      className={cn(
+                        'glass glass-hover rounded-xl p-4 text-right transition-all duration-300 animate-fade-in',
+                        product.stock > 0 
+                          ? 'hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98]'
+                          : 'opacity-50 cursor-not-allowed'
+                      )}
+                      style={{ animationDelay: `${index * 0.05}s` }}
+                    >
+                      <div className="flex items-center justify-center h-16 w-16 mx-auto mb-3 rounded-xl bg-secondary">
+                        <Package className="h-8 w-8 text-primary" />
+                      </div>
+                      <h3 className="font-medium text-foreground mb-1">{product.name}</h3>
+                      <p className="text-xs text-muted-foreground mb-2">{product.category}</p>
+                      <div className="flex items-center justify-between">
+                        <span className="text-sm font-bold text-primary">
+                          {toPersianNumber(product.price.toLocaleString())} ت
+                        </span>
+                        <span className={cn(
+                          'text-xs',
+                          product.stock < 10 ? 'text-warning' : 'text-muted-foreground',
+                          product.stock <= 0 && 'text-destructive'
+                        )}>
+                          {product.stock <= 0 ? 'ناموجود' : `${toPersianNumber(product.stock)} عدد`}
+                        </span>
+                      </div>
+                    </button>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+
+            <TabsContent value="history" className="mt-0">
+              {salesLoading ? (
+                <div className="flex items-center justify-center py-20">
+                  <Loader2 className="h-12 w-12 animate-spin text-primary" />
+                </div>
+              ) : sales.length === 0 ? (
+                <div className="flex flex-col items-center justify-center py-20 text-center">
+                  <History className="h-16 w-16 text-muted-foreground/30 mb-4" />
+                  <h3 className="text-lg font-medium text-foreground mb-2">تاریخچه‌ای وجود ندارد</h3>
+                  <p className="text-sm text-muted-foreground">اولین فروش خود را ثبت کنید.</p>
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  {sales.map((sale, index) => (
+                    <div 
+                      key={sale.id} 
+                      className="glass rounded-xl p-4 animate-fade-in"
+                      style={{ animationDelay: `${index * 0.03}s` }}
+                    >
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-secondary">
+                            <Package className="h-5 w-5 text-primary" />
+                          </div>
+                          <div>
+                            <p className="font-medium text-foreground">
+                              {toPersianNumber(sale.quantity)} × {sale.product_name}
+                            </p>
+                            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+                              {sale.device_name && (
+                                <span className="flex items-center gap-1">
+                                  <Monitor className="h-3 w-3" />
+                                  {sale.device_name}
+                                </span>
+                              )}
+                              {sale.customer_name && (
+                                <span className="flex items-center gap-1">
+                                  <User className="h-3 w-3" />
+                                  {sale.customer_name}
+                                </span>
+                              )}
+                              <span className="flex items-center gap-1">
+                                <Clock className="h-3 w-3" />
+                                {formatTime(sale.created_at)}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+                        <span className="font-bold text-primary">
+                          {toPersianNumber(sale.total_price.toLocaleString())} ت
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </div>
 
         {/* Cart */}
