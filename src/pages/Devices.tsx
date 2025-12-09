@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import { Plus, Filter, Monitor, Gamepad, Circle, Loader2 } from 'lucide-react';
+import { Filter, Monitor, Gamepad, Circle, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
+import { AddDeviceDialog } from '@/components/devices/AddDeviceDialog';
 import { useDevicesDB } from '@/hooks/useDevicesDB';
-import { cn } from '@/lib/utils';
+import { useAuth } from '@/contexts/AuthContext';
 
 type DeviceTypeFilter = 'all' | 'pc' | 'playstation' | 'billiard';
 
@@ -16,12 +17,30 @@ const deviceTypes: { type: DeviceTypeFilter; label: string; icon: typeof Monitor
 ];
 
 const Devices = () => {
-  const { devices, loading, startSession, pauseSession, stopSession } = useDevicesDB();
+  const { 
+    devices, 
+    loading, 
+    addDevice,
+    deleteDevice,
+    updateDeviceStatus,
+    startSession, 
+    pauseSession, 
+    stopSession 
+  } = useDevicesDB();
+  const { isStaffOrAdmin } = useAuth();
   const [filter, setFilter] = useState<DeviceTypeFilter>('all');
 
   const filteredDevices = filter === 'all' 
     ? devices 
     : devices.filter(d => d.type === filter);
+
+  const handleSetMaintenance = (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    if (device) {
+      const newStatus = device.status === 'maintenance' ? 'available' : 'maintenance';
+      updateDeviceStatus(deviceId, newStatus);
+    }
+  };
 
   if (loading) {
     return (
@@ -51,10 +70,9 @@ const Devices = () => {
             </Button>
           ))}
         </div>
-        <Button variant="glow" className="gap-2">
-          <Plus className="h-4 w-4" />
-          افزودن دستگاه
-        </Button>
+        {isStaffOrAdmin && (
+          <AddDeviceDialog onAdd={addDevice} />
+        )}
       </div>
 
       {/* Devices Grid */}
@@ -66,6 +84,9 @@ const Devices = () => {
               onStart={startSession}
               onPause={pauseSession}
               onStop={stopSession}
+              onDelete={isStaffOrAdmin ? deleteDevice : undefined}
+              onSetMaintenance={isStaffOrAdmin ? handleSetMaintenance : undefined}
+              showManageOptions={isStaffOrAdmin}
             />
           </div>
         ))}
@@ -75,7 +96,10 @@ const Devices = () => {
         <div className="flex flex-col items-center justify-center py-20 text-center">
           <Monitor className="h-16 w-16 text-muted-foreground/30 mb-4" />
           <h3 className="text-lg font-medium text-foreground mb-2">دستگاهی یافت نشد</h3>
-          <p className="text-sm text-muted-foreground">هیچ دستگاهی در این دسته‌بندی وجود ندارد.</p>
+          <p className="text-sm text-muted-foreground mb-4">هیچ دستگاهی در این دسته‌بندی وجود ندارد.</p>
+          {isStaffOrAdmin && (
+            <AddDeviceDialog onAdd={addDevice} />
+          )}
         </div>
       )}
     </MainLayout>
