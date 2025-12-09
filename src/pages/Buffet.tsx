@@ -1,30 +1,32 @@
 import { useState } from 'react';
-import { Plus, Search, Package, ShoppingCart } from 'lucide-react';
+import { Plus, Search, Package, ShoppingCart, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
-import { Product } from '@/types';
-
-const initialProducts: Product[] = [
-  { id: '1', name: 'نوشابه', price: 15000, stock: 48, category: 'نوشیدنی' },
-  { id: '2', name: 'آبمیوه', price: 20000, stock: 24, category: 'نوشیدنی' },
-  { id: '3', name: 'چیپس', price: 25000, stock: 36, category: 'خوراکی' },
-  { id: '4', name: 'شکلات', price: 18000, stock: 60, category: 'خوراکی' },
-  { id: '5', name: 'بیسکویت', price: 12000, stock: 40, category: 'خوراکی' },
-  { id: '6', name: 'آب معدنی', price: 8000, stock: 100, category: 'نوشیدنی' },
-  { id: '7', name: 'ساندویچ', price: 45000, stock: 12, category: 'غذا' },
-  { id: '8', name: 'پیتزا شخصی', price: 85000, stock: 8, category: 'غذا' },
-];
+import { useProducts } from '@/hooks/useProducts';
+import { useDevicesDB } from '@/hooks/useDevicesDB';
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from '@/components/ui/select';
 
 const Buffet = () => {
-  const [products] = useState<Product[]>(initialProducts);
+  const { products, loading, createSale } = useProducts();
+  const { devices } = useDevicesDB();
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<{ productId: string; quantity: number }[]>([]);
+  const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [submitting, setSubmitting] = useState(false);
 
   const filteredProducts = products.filter(p => 
     p.name.includes(searchQuery) || p.category.includes(searchQuery)
   );
+
+  const occupiedDevices = devices.filter(d => d.status === 'occupied');
 
   const addToCart = (productId: string) => {
     setCart(prev => {
@@ -47,7 +49,29 @@ const Buffet = () => {
     }, 0);
   };
 
+  const handleSubmitSale = async () => {
+    if (cart.length === 0) return;
+    
+    setSubmitting(true);
+    const result = await createSale(cart, selectedDevice || undefined);
+    if (result.success) {
+      setCart([]);
+      setSelectedDevice('');
+    }
+    setSubmitting(false);
+  };
+
   const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
+
+  if (loading) {
+    return (
+      <MainLayout title="مدیریت بوفه" subtitle="در حال بارگذاری...">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="مدیریت بوفه" subtitle="محصولات و فروش">
@@ -143,6 +167,27 @@ const Buffet = () => {
                 })}
               </div>
 
+              {/* Device Selection */}
+              {occupiedDevices.length > 0 && (
+                <div className="mb-4">
+                  <label className="text-xs text-muted-foreground mb-2 block">
+                    اختصاص به دستگاه (اختیاری)
+                  </label>
+                  <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+                    <SelectTrigger className="bg-secondary/50">
+                      <SelectValue placeholder="انتخاب دستگاه..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {occupiedDevices.map(device => (
+                        <SelectItem key={device.id} value={device.id}>
+                          {device.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              )}
+
               <div className="border-t border-border pt-4 space-y-4">
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">جمع کل</span>
@@ -150,13 +195,28 @@ const Buffet = () => {
                     {toPersianNumber(getCartTotal().toLocaleString())} تومان
                   </span>
                 </div>
-                <Button variant="glow" className="w-full">
-                  ثبت فروش
+                <Button 
+                  variant="glow" 
+                  className="w-full"
+                  onClick={handleSubmitSale}
+                  disabled={submitting}
+                >
+                  {submitting ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" />
+                      در حال ثبت...
+                    </>
+                  ) : (
+                    'ثبت فروش'
+                  )}
                 </Button>
                 <Button 
                   variant="outline" 
                   className="w-full"
-                  onClick={() => setCart([])}
+                  onClick={() => {
+                    setCart([]);
+                    setSelectedDevice('');
+                  }}
                 >
                   پاک کردن سبد
                 </Button>
