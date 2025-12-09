@@ -139,7 +139,7 @@ export function useDevicesDB() {
     }
   };
 
-  const startSession = async (deviceId: string) => {
+  const startSession = async (deviceId: string, customerName?: string) => {
     if (!gameCenter?.id) return;
 
     try {
@@ -152,6 +152,7 @@ export function useDevicesDB() {
           start_time: new Date().toISOString(),
           is_paused: false,
           total_paused_seconds: 0,
+          customer_name: customerName || null,
         });
 
       if (sessionError) throw sessionError;
