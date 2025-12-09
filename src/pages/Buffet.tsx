@@ -1,11 +1,13 @@
 import { useState } from 'react';
-import { Plus, Search, Package, ShoppingCart, Loader2 } from 'lucide-react';
+import { Search, Package, ShoppingCart, Loader2, User, Monitor, Trash2, Minus, Plus } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { cn } from '@/lib/utils';
 import { useProducts } from '@/hooks/useProducts';
 import { useDevicesDB } from '@/hooks/useDevicesDB';
+import { AddProductDialog } from '@/components/buffet/AddProductDialog';
+import { useAuth } from '@/contexts/AuthContext';
 import {
   Select,
   SelectContent,
@@ -13,13 +15,17 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
+import { Tabs, TabsList, TabsTrigger } from '@/components/ui/tabs';
 
 const Buffet = () => {
-  const { products, loading, createSale } = useProducts();
+  const { products, loading, createSale, addProduct } = useProducts();
   const { devices } = useDevicesDB();
+  const { isStaffOrAdmin } = useAuth();
   const [searchQuery, setSearchQuery] = useState('');
   const [cart, setCart] = useState<{ productId: string; quantity: number }[]>([]);
   const [selectedDevice, setSelectedDevice] = useState<string>('');
+  const [customerName, setCustomerName] = useState('');
+  const [saleType, setSaleType] = useState<'device' | 'customer'>('device');
   const [submitting, setSubmitting] = useState(false);
 
   const filteredProducts = products.filter(p => 
@@ -42,6 +48,22 @@ const Buffet = () => {
     });
   };
 
+  const updateQuantity = (productId: string, delta: number) => {
+    setCart(prev => {
+      return prev.map(item => {
+        if (item.productId === productId) {
+          const newQuantity = item.quantity + delta;
+          return newQuantity > 0 ? { ...item, quantity: newQuantity } : item;
+        }
+        return item;
+      }).filter(item => item.quantity > 0);
+    });
+  };
+
+  const removeFromCart = (productId: string) => {
+    setCart(prev => prev.filter(item => item.productId !== productId));
+  };
+
   const getCartTotal = () => {
     return cart.reduce((total, item) => {
       const product = products.find(p => p.id === item.productId);
@@ -53,10 +75,14 @@ const Buffet = () => {
     if (cart.length === 0) return;
     
     setSubmitting(true);
-    const result = await createSale(cart, selectedDevice || undefined);
+    const deviceId = saleType === 'device' ? selectedDevice : undefined;
+    const customer = saleType === 'customer' ? customerName.trim() : undefined;
+    
+    const result = await createSale(cart, deviceId, customer);
     if (result.success) {
       setCart([]);
       setSelectedDevice('');
+      setCustomerName('');
     }
     setSubmitting(false);
   };
@@ -88,42 +114,56 @@ const Buffet = () => {
                 className="pr-10 bg-secondary/50"
               />
             </div>
-            <Button variant="glow" className="gap-2">
-              <Plus className="h-4 w-4" />
-              افزودن محصول
-            </Button>
+            {isStaffOrAdmin && (
+              <AddProductDialog onAdd={addProduct} />
+            )}
           </div>
 
-          <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
-            {filteredProducts.map((product, index) => (
-              <button
-                key={product.id}
-                onClick={() => addToCart(product.id)}
-                className={cn(
-                  'glass glass-hover rounded-xl p-4 text-right transition-all duration-300 animate-fade-in',
-                  'hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98]'
-                )}
-                style={{ animationDelay: `${index * 0.05}s` }}
-              >
-                <div className="flex items-center justify-center h-16 w-16 mx-auto mb-3 rounded-xl bg-secondary">
-                  <Package className="h-8 w-8 text-primary" />
-                </div>
-                <h3 className="font-medium text-foreground mb-1">{product.name}</h3>
-                <p className="text-xs text-muted-foreground mb-2">{product.category}</p>
-                <div className="flex items-center justify-between">
-                  <span className="text-sm font-bold text-primary">
-                    {toPersianNumber(product.price.toLocaleString())} ت
-                  </span>
-                  <span className={cn(
-                    'text-xs',
-                    product.stock < 10 ? 'text-warning' : 'text-muted-foreground'
-                  )}>
-                    {toPersianNumber(product.stock)} عدد
-                  </span>
-                </div>
-              </button>
-            ))}
-          </div>
+          {filteredProducts.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-20 text-center">
+              <Package className="h-16 w-16 text-muted-foreground/30 mb-4" />
+              <h3 className="text-lg font-medium text-foreground mb-2">محصولی یافت نشد</h3>
+              <p className="text-sm text-muted-foreground mb-4">محصول جدید اضافه کنید.</p>
+              {isStaffOrAdmin && (
+                <AddProductDialog onAdd={addProduct} />
+              )}
+            </div>
+          ) : (
+            <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-4">
+              {filteredProducts.map((product, index) => (
+                <button
+                  key={product.id}
+                  onClick={() => addToCart(product.id)}
+                  disabled={product.stock <= 0}
+                  className={cn(
+                    'glass glass-hover rounded-xl p-4 text-right transition-all duration-300 animate-fade-in',
+                    product.stock > 0 
+                      ? 'hover:border-primary/50 hover:scale-[1.02] active:scale-[0.98]'
+                      : 'opacity-50 cursor-not-allowed'
+                  )}
+                  style={{ animationDelay: `${index * 0.05}s` }}
+                >
+                  <div className="flex items-center justify-center h-16 w-16 mx-auto mb-3 rounded-xl bg-secondary">
+                    <Package className="h-8 w-8 text-primary" />
+                  </div>
+                  <h3 className="font-medium text-foreground mb-1">{product.name}</h3>
+                  <p className="text-xs text-muted-foreground mb-2">{product.category}</p>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-primary">
+                      {toPersianNumber(product.price.toLocaleString())} ت
+                    </span>
+                    <span className={cn(
+                      'text-xs',
+                      product.stock < 10 ? 'text-warning' : 'text-muted-foreground',
+                      product.stock <= 0 && 'text-destructive'
+                    )}>
+                      {product.stock <= 0 ? 'ناموجود' : `${toPersianNumber(product.stock)} عدد`}
+                    </span>
+                  </div>
+                </button>
+              ))}
+            </div>
+          )}
         </div>
 
         {/* Cart */}
@@ -153,38 +193,114 @@ const Buffet = () => {
                   if (!product) return null;
                   return (
                     <div key={item.productId} className="flex items-center justify-between p-3 rounded-lg bg-secondary/50">
-                      <div>
-                        <p className="text-sm font-medium text-foreground">{product.name}</p>
+                      <div className="flex-1 min-w-0">
+                        <p className="text-sm font-medium text-foreground truncate">{product.name}</p>
                         <p className="text-xs text-muted-foreground">
-                          {toPersianNumber(item.quantity)} × {toPersianNumber(product.price.toLocaleString())} ت
+                          {toPersianNumber(product.price.toLocaleString())} ت
                         </p>
                       </div>
-                      <span className="text-sm font-bold text-primary">
-                        {toPersianNumber((product.price * item.quantity).toLocaleString())} ت
-                      </span>
+                      <div className="flex items-center gap-2">
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(item.productId, -1);
+                          }}
+                        >
+                          <Minus className="h-3 w-3" />
+                        </Button>
+                        <span className="text-sm font-bold w-6 text-center">
+                          {toPersianNumber(item.quantity)}
+                        </span>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            updateQuantity(item.productId, 1);
+                          }}
+                          disabled={item.quantity >= product.stock}
+                        >
+                          <Plus className="h-3 w-3" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="icon"
+                          className="h-7 w-7 text-destructive hover:text-destructive"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            removeFromCart(item.productId);
+                          }}
+                        >
+                          <Trash2 className="h-3 w-3" />
+                        </Button>
+                      </div>
                     </div>
                   );
                 })}
               </div>
 
+              {/* Sale type selection */}
+              <div className="mb-4">
+                <label className="text-xs text-muted-foreground mb-2 block">
+                  نوع فروش (اختیاری)
+                </label>
+                <Tabs value={saleType} onValueChange={(v) => setSaleType(v as 'device' | 'customer')}>
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="device" className="gap-1 text-xs">
+                      <Monitor className="h-3 w-3" />
+                      دستگاه
+                    </TabsTrigger>
+                    <TabsTrigger value="customer" className="gap-1 text-xs">
+                      <User className="h-3 w-3" />
+                      مشتری
+                    </TabsTrigger>
+                  </TabsList>
+                </Tabs>
+              </div>
+
               {/* Device Selection */}
-              {occupiedDevices.length > 0 && (
+              {saleType === 'device' && (
                 <div className="mb-4">
-                  <label className="text-xs text-muted-foreground mb-2 block">
-                    اختصاص به دستگاه (اختیاری)
-                  </label>
-                  <Select value={selectedDevice} onValueChange={setSelectedDevice}>
-                    <SelectTrigger className="bg-secondary/50">
-                      <SelectValue placeholder="انتخاب دستگاه..." />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {occupiedDevices.map(device => (
-                        <SelectItem key={device.id} value={device.id}>
-                          {device.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  {occupiedDevices.length > 0 ? (
+                    <Select value={selectedDevice} onValueChange={setSelectedDevice}>
+                      <SelectTrigger className="bg-secondary/50">
+                        <SelectValue placeholder="انتخاب دستگاه..." />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="">بدون دستگاه</SelectItem>
+                        {occupiedDevices.map(device => (
+                          <SelectItem key={device.id} value={device.id}>
+                            {device.name}
+                            {device.currentSession?.customer_name && (
+                              <span className="text-muted-foreground mr-2">
+                                ({device.currentSession.customer_name})
+                              </span>
+                            )}
+                          </SelectItem>
+                        ))}
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <p className="text-xs text-muted-foreground text-center py-2">
+                      هیچ دستگاه فعالی وجود ندارد
+                    </p>
+                  )}
+                </div>
+              )}
+
+              {/* Customer Name Input */}
+              {saleType === 'customer' && (
+                <div className="mb-4">
+                  <Input
+                    placeholder="نام مشتری..."
+                    value={customerName}
+                    onChange={(e) => setCustomerName(e.target.value)}
+                    className="bg-secondary/50"
+                  />
                 </div>
               )}
 
@@ -216,6 +332,7 @@ const Buffet = () => {
                   onClick={() => {
                     setCart([]);
                     setSelectedDevice('');
+                    setCustomerName('');
                   }}
                 >
                   پاک کردن سبد
