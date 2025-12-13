@@ -1,0 +1,156 @@
+import { useState } from 'react';
+import { Monitor, Users, DollarSign, Coffee, LogOut, Store } from 'lucide-react';
+import { MainLayout } from '@/components/layout/MainLayout';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
+import { RecentActivity } from '@/components/dashboard/RecentActivity';
+import { InvoiceDialog, InvoiceData } from '@/components/devices/InvoiceDialog';
+import { useDevicesDB } from '@/hooks/useDevicesDB';
+import { useDailyRevenue } from '@/hooks/useDailyRevenue';
+import { useAuth } from '@/contexts/AuthContext';
+import { Button } from '@/components/ui/button';
+import { Loader2 } from 'lucide-react';
+
+const Index = () => {
+  const { devices, loading, startSession, pauseSession, stopSession, getStats } = useDevicesDB();
+  const { stats: revenueStats, loading: revenueLoading } = useDailyRevenue();
+  const { signOut, user, userRole, gameCenter } = useAuth();
+  const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const stats = getStats();
+
+  const toPersianNumber = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
+
+  const roleLabels = {
+    admin: 'مدیر',
+    staff: 'کارمند',
+    customer: 'مشتری',
+  };
+
+  if (loading) {
+    return (
+      <MainLayout title="داشبورد" subtitle="در حال بارگذاری...">
+        <div className="flex items-center justify-center py-20">
+          <Loader2 className="h-12 w-12 animate-spin text-primary" />
+        </div>
+      </MainLayout>
+    );
+  }
+
+  return (
+    <MainLayout 
+      title={gameCenter?.name || 'داشبورد'} 
+      subtitle="نمای کلی وضعیت گیم نت"
+    >
+      {/* User Info Bar */}
+      <div className="glass rounded-xl p-4 mb-6 flex items-center justify-between">
+        <div className="flex items-center gap-3">
+          <div className="h-10 w-10 rounded-full gradient-primary flex items-center justify-center text-primary-foreground font-bold">
+            {user?.email?.charAt(0).toUpperCase()}
+          </div>
+          <div>
+            <p className="font-medium text-foreground">{user?.email}</p>
+            <div className="flex items-center gap-2 text-xs text-muted-foreground">
+              <span>{userRole ? roleLabels[userRole] : 'کاربر'}</span>
+              <span>•</span>
+              <Store className="h-3 w-3" />
+              <span>{gameCenter?.name}</span>
+            </div>
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={signOut} className="gap-2">
+          <LogOut className="h-4 w-4" />
+          خروج
+        </Button>
+      </div>
+
+      {/* Stats Grid */}
+      <div className="grid grid-cols-2 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+        <StatCard
+          title="دستگاه‌های فعال"
+          value={toPersianNumber(stats.occupied)}
+          subtitle={`از ${toPersianNumber(stats.total)} دستگاه`}
+          icon={Monitor}
+          variant="primary"
+        />
+        <StatCard
+          title="درآمد امروز"
+          value={`${toPersianNumber(Math.floor((revenueStats.deviceRevenue + revenueStats.buffetRevenue)  / 1000))} `}
+          subtitle="تومان"
+          icon={DollarSign}
+          variant="success"
+        />
+        <StatCard
+          title="فروش بوفه"
+          value={`${toPersianNumber(Math.floor(revenueStats.buffetRevenue / 1000))} `}
+          subtitle={`${toPersianNumber(revenueStats.transactionCount)} تراکنش`}
+          icon={Coffee}
+        />
+        <StatCard
+          title="کاربران آنلاین"
+          value={toPersianNumber(stats.occupied)}
+          subtitle="کاربر فعال"
+          icon={Users}
+        />
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+        {/* Devices Section */}
+        <div className="lg:col-span-2">
+          <div className="flex items-center justify-between mb-6">
+            <h2 className="text-xl font-bold text-foreground">وضعیت دستگاه‌ها</h2>
+            <div className="flex gap-4 text-sm">
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-success"></span>
+                <span className="text-muted-foreground">آزاد ({toPersianNumber(stats.available)})</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-primary animate-pulse"></span>
+                <span className="text-muted-foreground">مشغول ({toPersianNumber(stats.occupied)})</span>
+              </span>
+              <span className="flex items-center gap-2">
+                <span className="h-2 w-2 rounded-full bg-warning"></span>
+                <span className="text-muted-foreground">سرویس ({toPersianNumber(stats.maintenance)})</span>
+              </span>
+            </div>
+          </div>
+
+          {devices.length === 0 ? (
+            <div className="glass rounded-2xl p-12 text-center">
+              <Monitor className="h-16 w-16 mx-auto mb-4 text-muted-foreground/30" />
+              <h3 className="text-lg font-medium text-foreground mb-2">هیچ دستگاهی یافت نشد</h3>
+              <p className="text-sm text-muted-foreground">دستگاه‌های گیم نت در حال بارگذاری...</p>
+            </div>
+          ) : (
+            <div className="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-4">
+              {devices.map((device, index) => (
+                <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
+                  <DeviceCardDB
+                    device={device}
+                    onStart={startSession}
+                    onPause={pauseSession}
+                    onStop={stopSession}
+                    onShowInvoice={setInvoiceData}
+                  />
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        {/* Activity Feed */}
+        <div>
+          <RecentActivity />
+        </div>
+      </div>
+
+      {/* Invoice Dialog */}
+      <InvoiceDialog
+        open={!!invoiceData}
+        onOpenChange={(open) => !open && setInvoiceData(null)}
+        invoice={invoiceData}
+      />
+    </MainLayout>
+  );
+};
+
+export default Index;
