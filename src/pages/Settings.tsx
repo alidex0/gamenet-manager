@@ -1,11 +1,12 @@
 import { useState } from 'react';
-import { Save, Monitor, DollarSign, Clock, Bell, Shield, Palette } from 'lucide-react';
+import { Save, Monitor, DollarSign, Clock, Bell, Shield, Palette, Eye, EyeOff } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { cn } from '@/lib/utils';
+import { useChangePassword } from '@/hooks/useChangePassword';
 
 const Settings = () => {
   const [rates, setRates] = useState({
@@ -13,6 +14,32 @@ const Settings = () => {
     playstation: '۸۰۰۰۰',
     billiard: '۱۲۰۰۰۰',
   });
+
+  const [passwordForm, setPasswordForm] = useState({
+    current: '',
+    new: '',
+    confirm: '',
+  });
+
+  const [showPasswords, setShowPasswords] = useState({
+    current: false,
+    new: false,
+    confirm: false,
+  });
+
+  const { loading: passwordLoading, changePassword } = useChangePassword();
+
+  const handleChangePassword = async () => {
+    if (passwordForm.new !== passwordForm.confirm) {
+      alert('رمز عبور جدید و تأیید آن با هم مطابقت ندارند');
+      return;
+    }
+
+    const result = await changePassword(passwordForm.current, passwordForm.new);
+    if (result.success) {
+      setPasswordForm({ current: '', new: '', confirm: '' });
+    }
+  };
 
   const settingsSections = [
     {
@@ -101,22 +128,74 @@ const Settings = () => {
       description: 'تنظیمات امنیتی و رمز عبور',
       content: (
         <div className="space-y-4">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+          <div className="grid grid-cols-1 gap-6">
             <div className="space-y-2">
               <Label>رمز عبور فعلی</Label>
-              <Input type="password" className="bg-secondary/50" />
+              <div className="relative">
+                <Input 
+                  type={showPasswords.current ? 'text' : 'password'}
+                  placeholder="رمز عبور فعلی را وارد کنید"
+                  value={passwordForm.current}
+                  onChange={(e) => setPasswordForm(p => ({ ...p, current: e.target.value }))}
+                  className="bg-secondary/50 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(p => ({ ...p, current: !p.current }))}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPasswords.current ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
+
             <div className="space-y-2">
               <Label>رمز عبور جدید</Label>
-              <Input type="password" className="bg-secondary/50" />
+              <div className="relative">
+                <Input 
+                  type={showPasswords.new ? 'text' : 'password'}
+                  placeholder="رمز عبور جدید را وارد کنید"
+                  value={passwordForm.new}
+                  onChange={(e) => setPasswordForm(p => ({ ...p, new: e.target.value }))}
+                  className="bg-secondary/50 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(p => ({ ...p, new: !p.new }))}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPasswords.new ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-          </div>
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="font-medium text-foreground">احراز هویت دو مرحله‌ای</p>
-              <p className="text-sm text-muted-foreground">افزایش امنیت با تأیید پیامکی</p>
+
+            <div className="space-y-2">
+              <Label>تأیید رمز عبور جدید</Label>
+              <div className="relative">
+                <Input 
+                  type={showPasswords.confirm ? 'text' : 'password'}
+                  placeholder="رمز عبور جدید را دوباره وارد کنید"
+                  value={passwordForm.confirm}
+                  onChange={(e) => setPasswordForm(p => ({ ...p, confirm: e.target.value }))}
+                  className="bg-secondary/50 pr-10"
+                />
+                <button
+                  type="button"
+                  onClick={() => setShowPasswords(p => ({ ...p, confirm: !p.confirm }))}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                >
+                  {showPasswords.confirm ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                </button>
+              </div>
             </div>
-            <Switch  dir='ltr' />
+
+            <Button 
+              onClick={handleChangePassword}
+              disabled={passwordLoading || !passwordForm.current || !passwordForm.new || !passwordForm.confirm}
+              className="w-full"
+            >
+              {passwordLoading ? 'در حال تغییر...' : 'تغییر رمز عبور'}
+            </Button>
           </div>
         </div>
       ),

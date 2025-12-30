@@ -264,12 +264,18 @@ export function DeviceCardDB({
             <div className="rounded-lg bg-background/50 p-3">
               <div className="flex items-center justify-between">
                 <span className="text-xs text-muted-foreground">هزینه فعلی</span>
-                <span className={cn(
-                  'text-xl font-bold',
+                <div className={cn(
+                  'font-bold whitespace-nowrap',
                   device.currentSession.is_paused ? 'text-warning' : 'text-primary glow-text'
                 )}>
-                  {toPersianNumber(currentCost.toLocaleString())} <span className="text-sm">تومان</span>
-                </span>
+                  <span style={{
+                    fontSize: currentCost > 9999999 ? '0.875rem' : currentCost > 999999 ? '1rem' : '1.25rem',
+                    lineHeight: '1',
+                    display: 'inline-block'
+                  }}>
+                    {toPersianNumber(currentCost.toLocaleString())} <span className="text-xs">تومان</span>
+                  </span>
+                </div>
               </div>
             </div>
             

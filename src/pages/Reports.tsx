@@ -16,6 +16,60 @@ const deviceColors: Record<string, string> = {
 
 const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
 
+const downloadReportAsCSV = (stats: any, dailyRevenue: any[], invoicesByDay: any[]) => {
+  let csvContent = '\uFEFF'; // UTF-8 BOM
+  
+  // Helper function to convert to thousands
+  const toThousands = (amount: number) => {
+    return (amount / 1000).toFixed(2);
+  };
+
+  // Header
+  csvContent += 'گزارش درآمد گیم نت\n';
+  csvContent += `تاریخ تهیه: ${new Date().toLocaleDateString('fa-IR')}\n\n`;
+
+  // Summary Stats
+  csvContent += 'خلاصه\n';
+  csvContent += `درآمد کل: ${toThousands(stats.total_revenue)} هزار تومان\n`;
+  csvContent += `درآمد دستگاه‌ها: ${toThousands(stats.devices_revenue)} هزار تومان\n`;
+  csvContent += `درآمد بوفه: ${toThousands(stats.buffet_revenue)} هزار تومان\n`;
+  csvContent += `میانگین روزانه: ${toThousands(stats.average_daily)} هزار تومان\n\n`;
+
+  // Daily Revenue
+  csvContent += 'درآمد روزانه\n';
+  csvContent += 'روز,تاریخ,دستگاه‌ها (هزار تومان),بوفه (هزار تومان),جمع (هزار تومان)\n';
+  dailyRevenue.forEach(day => {
+    const devicesAmount = toThousands(day.devices_revenue);
+    const buffetAmount = toThousands(day.buffet_revenue);
+    const totalAmount = toThousands(day.devices_revenue + day.buffet_revenue);
+    csvContent += `${day.day_name},${day.date},${devicesAmount},${buffetAmount},${totalAmount}\n`;
+  });
+  csvContent += '\n';
+
+  // Invoices
+  csvContent += 'فاکتورها\n';
+  csvContent += 'تاریخ,ساعت,نوع,توضیح,مبلغ (هزار تومان),مشتری\n';
+  invoicesByDay.forEach(dayGroup => {
+    dayGroup.invoices.forEach((invoice: any) => {
+      const amount = toThousands(invoice.amount);
+      csvContent += `${dayGroup.date},${invoice.time},${invoice.type === 'device' ? 'دستگاه' : 'بوفه'},${invoice.description},${amount},"${invoice.customer_name || ''}"\n`;
+    });
+  });
+
+  // Create blob and download
+  const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+  const link = document.createElement('a');
+  const url = URL.createObjectURL(blob);
+  
+  link.setAttribute('href', url);
+  link.setAttribute('download', `گزارش_درآمد_${new Date().toISOString().split('T')[0]}.csv`);
+  link.style.visibility = 'hidden';
+  
+  document.body.appendChild(link);
+  link.click();
+  document.body.removeChild(link);
+};
+
 const Reports = () => {
   const { loading, dailyRevenue, deviceTypeRevenue, hourlyUsage, stats } = useReports();
   const { loading: invoicesLoading, invoicesByDay } = useAllInvoices();
@@ -49,7 +103,11 @@ const Reports = () => {
         <div className="flex gap-2">
           <Button variant="default" size="sm">هفتگی</Button>
         </div>
-        <Button variant="outline" className="gap-2">
+        <Button 
+          variant="outline" 
+          className="gap-2"
+          onClick={() => downloadReportAsCSV(stats, dailyRevenue, invoicesByDay)}
+        >
           <Download className="h-4 w-4" />
           دانلود گزارش
         </Button>
