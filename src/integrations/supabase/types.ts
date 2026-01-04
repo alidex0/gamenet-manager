@@ -119,6 +119,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          default_rates: Json | null
           id: string
           is_active: boolean | null
           name: string
@@ -129,6 +130,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          default_rates?: Json | null
           id?: string
           is_active?: boolean | null
           name?: string
@@ -139,6 +141,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          default_rates?: Json | null
           id?: string
           is_active?: boolean | null
           name?: string
