@@ -5,17 +5,30 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { DeviceCardDB } from '@/components/dashboard/DeviceCardDB';
 import { RecentActivity } from '@/components/dashboard/RecentActivity';
 import { InvoiceDialog, InvoiceData } from '@/components/devices/InvoiceDialog';
-import { useDevicesDB } from '@/hooks/useDevicesDB';
+import { StartSessionDialog } from '@/components/devices/StartSessionDialog';
+import { useDevicesDB, DeviceWithSession } from '@/hooks/useDevicesDB';
 import { useDailyRevenue } from '@/hooks/useDailyRevenue';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Loader2 } from 'lucide-react';
 
 const Index = () => {
-  const { devices, loading, startSession, pauseSession, stopSession, getStats } = useDevicesDB();
+  const { 
+    devices, 
+    loading, 
+    startSession, 
+    pauseSession, 
+    stopSession, 
+    getStats,
+    updateDeviceStatus,
+    updateSessionCustomerName,
+    updateDevice,
+    deleteDevice
+  } = useDevicesDB();
   const { stats: revenueStats, loading: revenueLoading } = useDailyRevenue();
-  const { signOut, user, userRole, gameCenter } = useAuth();
+  const { signOut, user, userRole, gameCenter, isStaffOrAdmin } = useAuth();
   const [invoiceData, setInvoiceData] = useState<InvoiceData | null>(null);
+  const [startDialogDevice, setStartDialogDevice] = useState<DeviceWithSession | null>(null);
   const stats = getStats();
 
   const toPersianNumber = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
@@ -24,6 +37,28 @@ const Index = () => {
     admin: 'مدیر',
     staff: 'کارمند',
     customer: 'مشتری',
+  };
+
+  const handleStartClick = (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    if (device) {
+      setStartDialogDevice(device);
+    }
+  };
+
+  const handleStartConfirm = (customerName?: string) => {
+    if (startDialogDevice) {
+      startSession(startDialogDevice.id, customerName);
+      setStartDialogDevice(null);
+    }
+  };
+
+  const handleSetMaintenance = (deviceId: string) => {
+    const device = devices.find(d => d.id === deviceId);
+    if (device) {
+      const newStatus = device.status === 'maintenance' ? 'available' : 'maintenance';
+      updateDeviceStatus(deviceId, newStatus);
+    }
   };
 
   if (loading) {
@@ -126,9 +161,14 @@ const Index = () => {
                 <div key={device.id} style={{ animationDelay: `${index * 0.05}s` }}>
                   <DeviceCardDB
                     device={device}
-                    onStart={startSession}
+                    onStart={handleStartClick}
                     onPause={pauseSession}
                     onStop={stopSession}
+                    onDelete={isStaffOrAdmin ? deleteDevice : undefined}
+                    onSetMaintenance={isStaffOrAdmin ? handleSetMaintenance : undefined}
+                    onUpdateCustomerName={isStaffOrAdmin ? updateSessionCustomerName : undefined}
+                    onUpdateDevice={isStaffOrAdmin ? updateDevice : undefined}
+                    showManageOptions={isStaffOrAdmin}
                     onShowInvoice={setInvoiceData}
                   />
                 </div>
@@ -148,6 +188,14 @@ const Index = () => {
         open={!!invoiceData}
         onOpenChange={(open) => !open && setInvoiceData(null)}
         invoice={invoiceData}
+      />
+
+      {/* Start Session Dialog */}
+      <StartSessionDialog
+        open={!!startDialogDevice}
+        onOpenChange={(open) => !open && setStartDialogDevice(null)}
+        deviceName={startDialogDevice?.name || ''}
+        onConfirm={handleStartConfirm}
       />
     </MainLayout>
   );

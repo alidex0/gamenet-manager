@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Save, Monitor, DollarSign, Clock, Bell, Shield, Palette, Eye, EyeOff } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Button } from '@/components/ui/button';
@@ -6,13 +6,23 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
 import { useChangePassword } from '@/hooks/useChangePassword';
+import { useDefaultRates } from '@/hooks/useDefaultRates';
 
 const Settings = () => {
-  const [rates, setRates] = useState({
-    pc: '۵۰۰۰۰',
-    playstation: '۸۰۰۰۰',
-    billiard: '۱۲۰۰۰۰',
+  const { rates, loading: ratesLoading, updateRates } = useDefaultRates();
+  const [displayRates, setDisplayRates] = useState({
+    pc: rates.pc.toString(),
+    playstation: rates.playstation.toString(),
+    billiard: rates.billiard.toString(),
   });
+
+  useEffect(() => {
+    setDisplayRates({
+      pc: rates.pc.toString(),
+      playstation: rates.playstation.toString(),
+      billiard: rates.billiard.toString(),
+    });
+  }, [rates]);
 
   const [passwordForm, setPasswordForm] = useState({
     current: '',
@@ -27,6 +37,15 @@ const Settings = () => {
   });
 
   const { loading: passwordLoading, changePassword } = useChangePassword();
+
+  const handleSaveRates = async () => {
+    const newRates = {
+      pc: parseInt(displayRates.pc) || 0,
+      playstation: parseInt(displayRates.playstation) || 0,
+      billiard: parseInt(displayRates.billiard) || 0,
+    };
+    await updateRates(newRates);
+  };
 
   const handleChangePassword = async () => {
     if (passwordForm.new !== passwordForm.confirm) {
@@ -50,27 +69,37 @@ const Settings = () => {
           <div className="space-y-2">
             <Label>کامپیوتر (تومان)</Label>
             <Input 
-              value={rates.pc} 
-              onChange={(e) => setRates(p => ({ ...p, pc: e.target.value }))}
+              type="number"
+              value={displayRates.pc} 
+              onChange={(e) => setDisplayRates(p => ({ ...p, pc: e.target.value }))}
               className="bg-secondary/50"
             />
           </div>
           <div className="space-y-2">
             <Label>پلی‌استیشن (تومان)</Label>
             <Input 
-              value={rates.playstation} 
-              onChange={(e) => setRates(p => ({ ...p, playstation: e.target.value }))}
+              type="number"
+              value={displayRates.playstation} 
+              onChange={(e) => setDisplayRates(p => ({ ...p, playstation: e.target.value }))}
               className="bg-secondary/50"
             />
           </div>
           <div className="space-y-2">
             <Label>بیلیارد (تومان)</Label>
             <Input 
-              value={rates.billiard} 
-              onChange={(e) => setRates(p => ({ ...p, billiard: e.target.value }))}
+              type="number"
+              value={displayRates.billiard} 
+              onChange={(e) => setDisplayRates(p => ({ ...p, billiard: e.target.value }))}
               className="bg-secondary/50"
             />
           </div>
+          <Button 
+            onClick={handleSaveRates}
+            disabled={ratesLoading}
+            className="md:col-span-3 mt-4"
+          >
+            {ratesLoading ? 'در حال ذخیره...' : 'ذخیره تعرفه‌ها'}
+          </Button>
         </div>
       ),
     },
@@ -223,10 +252,10 @@ const Settings = () => {
           </div>
         ))}
 
-        <div className="flex justify-end">
+      <div className="flex justify-end">
           <Button variant="glow" className="gap-2">
             <Save className="h-4 w-4" />
-            ذخیره تغییرات
+            تمام تنظیمات خودکار ذخیره شدند
           </Button>
         </div>
       </div>

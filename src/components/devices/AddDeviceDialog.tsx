@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Monitor, Gamepad, Circle, Plus, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -18,23 +18,31 @@ import {
   SelectValue,
 } from '@/components/ui/select';
 import { NewDevice } from '@/hooks/useDevicesDB';
+import { useDefaultRates } from '@/hooks/useDefaultRates';
 
 interface AddDeviceDialogProps {
   onAdd: (device: NewDevice) => Promise<{ success: boolean }>;
 }
 
-const deviceTypes = [
-  { value: 'pc', label: 'کامپیوتر', icon: Monitor, defaultRate: 50000 },
-  { value: 'playstation', label: 'پلی‌استیشن', icon: Gamepad, defaultRate: 80000 },
-  { value: 'billiard', label: 'بیلیارد', icon: Circle, defaultRate: 120000 },
-  { value: 'other', label: 'سایر', icon: Circle, defaultRate: 50000 },
-];
-
 type DeviceTypeValue = 'pc' | 'playstation' | 'billiard' | 'other';
+
+interface DeviceType {
+  value: DeviceTypeValue;
+  label: string;
+  icon: any;
+}
+
+const deviceTypeConfig: DeviceType[] = [
+  { value: 'pc', label: 'کامپیوتر', icon: Monitor },
+  { value: 'playstation', label: 'پلی‌استیشن', icon: Gamepad },
+  { value: 'billiard', label: 'بیلیارد', icon: Circle },
+  { value: 'other', label: 'سایر', icon: Circle },
+];
 
 export function AddDeviceDialog({ onAdd }: AddDeviceDialogProps) {
   const [open, setOpen] = useState(false);
   const [loading, setLoading] = useState(false);
+  const { rates } = useDefaultRates();
   const [formData, setFormData] = useState<{
     name: string;
     type: DeviceTypeValue;
@@ -45,12 +53,33 @@ export function AddDeviceDialog({ onAdd }: AddDeviceDialogProps) {
     hourly_rate: 50000,
   });
 
+  // Sync hourly_rate with default rates when they change
+  useEffect(() => {
+    if (formData.type === 'pc') {
+      setFormData(prev => ({ ...prev, hourly_rate: rates.pc }));
+    } else if (formData.type === 'playstation') {
+      setFormData(prev => ({ ...prev, hourly_rate: rates.playstation }));
+    } else if (formData.type === 'billiard') {
+      setFormData(prev => ({ ...prev, hourly_rate: rates.billiard }));
+    }
+  }, [rates, formData.type]);
+
   const handleTypeChange = (type: string) => {
-    const deviceType = deviceTypes.find(t => t.value === type);
+    const newType = type as DeviceTypeValue;
+    let newRate = 50000;
+    
+    if (newType === 'pc') {
+      newRate = rates.pc;
+    } else if (newType === 'playstation') {
+      newRate = rates.playstation;
+    } else if (newType === 'billiard') {
+      newRate = rates.billiard;
+    }
+
     setFormData(prev => ({
       ...prev,
-      type: type as DeviceTypeValue,
-      hourly_rate: deviceType?.defaultRate || 50000,
+      type: newType,
+      hourly_rate: newRate,
     }));
   };
 
@@ -63,7 +92,10 @@ export function AddDeviceDialog({ onAdd }: AddDeviceDialogProps) {
     setLoading(false);
 
     if (result.success) {
-      setFormData({ name: '', type: 'pc', hourly_rate: 50000 });
+      const defaultRate = formData.type === 'pc' ? rates.pc : 
+                          formData.type === 'playstation' ? rates.playstation :
+                          formData.type === 'billiard' ? rates.billiard : 50000;
+      setFormData({ name: '', type: 'pc', hourly_rate: defaultRate });
       setOpen(false);
     }
   };
@@ -102,7 +134,7 @@ export function AddDeviceDialog({ onAdd }: AddDeviceDialogProps) {
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
-                {deviceTypes.map(type => (
+                {deviceTypeConfig.map(type => (
                   <SelectItem key={type.value} value={type.value}>
                     <div className="flex items-center gap-2">
                       <type.icon className="h-4 w-4" />
