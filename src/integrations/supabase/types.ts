@@ -317,9 +317,21 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      can_staff_view_profile: {
+        Args: { _profile_id: string; _staff_id: string }
+        Returns: boolean
+      }
       get_user_game_center_id: { Args: { _user_id: string }; Returns: string }
       has_role: {
         Args: {
+          _role: Database["public"]["Enums"]["app_role"]
+          _user_id: string
+        }
+        Returns: boolean
+      }
+      has_role_in_game_center: {
+        Args: {
+          _game_center_id: string
           _role: Database["public"]["Enums"]["app_role"]
           _user_id: string
         }
