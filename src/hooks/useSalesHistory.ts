@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import * as local from '@/lib/localBackend';
 
 export interface SaleRecord {
   id: string;
@@ -16,14 +17,30 @@ export interface SaleRecord {
 export function useSalesHistory() {
   const [sales, setSales] = useState<SaleRecord[]>([]);
   const [loading, setLoading] = useState(true);
-  const { gameCenter } = useAuth();
+  const { gameCenter, isLocalMode } = useAuth();
 
   const fetchSales = useCallback(async () => {
-    if (!gameCenter?.id) {
+    if (isLocalMode) {
+      const products = local.getProducts();
+      const devices = local.getDevices();
+      const all = local.getSales()
+        .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
+        .slice(0, 50);
+      setSales(all.map(s => ({
+        id: s.id,
+        product_name: products.find(p => p.id === s.product_id)?.name || 'محصول حذف شده',
+        device_name: devices.find(d => d.id === s.device_id)?.name || null,
+        customer_name: s.customer_name,
+        quantity: s.quantity,
+        unit_price: s.unit_price,
+        total_price: s.total_price,
+        created_at: s.created_at,
+      })));
       setLoading(false);
       return;
     }
 
+    if (!gameCenter?.id) { setLoading(false); return; }
     try {
       const { data, error } = await supabase
         .from('sales')
@@ -31,10 +48,8 @@ export function useSalesHistory() {
         .eq('game_center_id', gameCenter.id)
         .order('created_at', { ascending: false })
         .limit(50);
-
       if (error) throw error;
-
-      const formattedSales: SaleRecord[] = (data || []).map(sale => ({
+      setSales((data || []).map(sale => ({
         id: sale.id,
         product_name: (sale.products as any)?.name || 'محصول حذف شده',
         device_name: (sale.devices as any)?.name || null,
@@ -43,23 +58,13 @@ export function useSalesHistory() {
         unit_price: sale.unit_price,
         total_price: sale.total_price,
         created_at: sale.created_at,
-      }));
+      })));
+    } catch (e) {
+      console.error(e);
+    } finally { setLoading(false); }
+  }, [gameCenter?.id, isLocalMode]);
 
-      setSales(formattedSales);
-    } catch (error) {
-      console.error('Error fetching sales:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [gameCenter?.id]);
+  useEffect(() => { fetchSales(); }, [fetchSales]);
 
-  useEffect(() => {
-    fetchSales();
-  }, [fetchSales]);
-
-  return {
-    sales,
-    loading,
-    refetch: fetchSales,
-  };
+  return { sales, loading, refetch: fetchSales };
 }
