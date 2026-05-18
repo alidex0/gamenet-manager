@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/contexts/AuthContext';
+import * as local from '@/lib/localBackend';
 
 export interface Activity {
   id: string;
@@ -12,135 +13,109 @@ export interface Activity {
 }
 
 function getTimeAgo(date: Date): string {
-  const now = new Date();
-  const diffMs = now.getTime() - date.getTime();
-  const diffSeconds = Math.floor(diffMs / 1000);
-  const diffMinutes = Math.floor(diffSeconds / 60);
-  const diffHours = Math.floor(diffMinutes / 60);
-  const diffDays = Math.floor(diffHours / 24);
-
-  const toPersianNumber = (n: number) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
-
-  if (diffMinutes < 1) return 'همین الان';
-  if (diffMinutes < 60) return `${toPersianNumber(diffMinutes)} دقیقه پیش`;
-  if (diffHours < 24) return `${toPersianNumber(diffHours)} ساعت پیش`;
-  return `${toPersianNumber(diffDays)} روز پیش`;
+  const diff = Date.now() - date.getTime();
+  const m = Math.floor(diff / 60000), h = Math.floor(m / 60), d = Math.floor(h / 24);
+  const toFa = (n: number) => n.toString().replace(/\d/g, x => '۰۱۲۳۴۵۶۷۸۹'[parseInt(x)]);
+  if (m < 1) return 'همین الان';
+  if (m < 60) return `${toFa(m)} دقیقه پیش`;
+  if (h < 24) return `${toFa(h)} ساعت پیش`;
+  return `${toFa(d)} روز پیش`;
 }
+
+const toFa = (n: number | string) => n.toString().replace(/\d/g, x => '۰۱۲۳۴۵۶۷۸۹'[parseInt(x)]);
 
 export function useRecentActivity() {
   const [activities, setActivities] = useState<Activity[]>([]);
   const [loading, setLoading] = useState(true);
-  const { gameCenter } = useAuth();
+  const { gameCenter, isLocalMode } = useAuth();
 
   const fetchActivities = useCallback(async () => {
-    if (!gameCenter?.id) {
+    if (isLocalMode) {
+      const devices = local.getDevices();
+      const products = local.getProducts();
+      const all: Activity[] = [];
+      local.getSessions().slice(-20).forEach(s => {
+        const deviceName = devices.find(d => d.id === s.device_id)?.name || 'دستگاه';
+        all.push({
+          id: `session-start-${s.id}`, type: 'device_start', title: deviceName,
+          description: s.customer_name ? `شروع استفاده توسط ${s.customer_name}` : 'شروع استفاده',
+          time: new Date(s.start_time), timeAgo: getTimeAgo(new Date(s.start_time)),
+        });
+        if (s.end_time && s.total_cost) {
+          const dur = Math.floor((new Date(s.end_time).getTime() - new Date(s.start_time).getTime()) / 60000);
+          const hrs = Math.floor(dur / 60), mins = dur % 60;
+          const durStr = hrs > 0 ? `${toFa(hrs)} ساعت و ${toFa(mins)} دقیقه` : `${toFa(mins)} دقیقه`;
+          all.push({
+            id: `session-end-${s.id}`, type: 'device_end', title: deviceName,
+            description: `پایان استفاده - ${durStr} - ${toFa(s.total_cost)} ت`,
+            time: new Date(s.end_time), timeAgo: getTimeAgo(new Date(s.end_time)),
+          });
+        }
+      });
+      local.getSales().slice(-20).forEach(s => {
+        const pName = products.find(p => p.id === s.product_id)?.name || 'محصول';
+        const dName = devices.find(d => d.id === s.device_id)?.name;
+        all.push({
+          id: `sale-${s.id}`, type: 'sale', title: 'فروش بوفه',
+          description: dName ? `${toFa(s.quantity)} × ${pName} - ${dName}` : `${toFa(s.quantity)} × ${pName}`,
+          time: new Date(s.created_at), timeAgo: getTimeAgo(new Date(s.created_at)),
+        });
+      });
+      all.sort((a, b) => b.time.getTime() - a.time.getTime());
+      setActivities(all.slice(0, 10));
       setLoading(false);
       return;
     }
 
+    if (!gameCenter?.id) { setLoading(false); return; }
     try {
-      // Fetch recent sessions (both active and completed)
-      const { data: sessionsData, error: sessionsError } = await supabase
-        .from('device_sessions')
-        .select('*, devices!device_sessions_device_id_fkey(name)')
-        .eq('game_center_id', gameCenter.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
+      const { data: sessionsData } = await supabase
+        .from('device_sessions').select('*, devices!device_sessions_device_id_fkey(name)')
+        .eq('game_center_id', gameCenter.id).order('created_at', { ascending: false }).limit(20);
+      const { data: salesData } = await supabase
+        .from('sales').select('*, products!sales_product_id_fkey(name), devices!sales_device_id_fkey(name)')
+        .eq('game_center_id', gameCenter.id).order('created_at', { ascending: false }).limit(20);
 
-      if (sessionsError) throw sessionsError;
-
-      // Fetch recent sales with product info
-      const { data: salesData, error: salesError } = await supabase
-        .from('sales')
-        .select('*, products!sales_product_id_fkey(name), devices!sales_device_id_fkey(name)')
-        .eq('game_center_id', gameCenter.id)
-        .order('created_at', { ascending: false })
-        .limit(20);
-
-      if (salesError) throw salesError;
-
-      const toPersianNumber = (n: number | string) => n.toString().replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[parseInt(d)]);
-
-      const allActivities: Activity[] = [];
-
-      // Add session activities
+      const all: Activity[] = [];
       sessionsData?.forEach(session => {
         const deviceName = (session.devices as any)?.name || 'دستگاه';
-        const customerName = session.customer_name;
-        
-        // Session start
-        allActivities.push({
-          id: `session-start-${session.id}`,
-          type: 'device_start',
-          title: deviceName,
-          description: customerName 
-            ? `شروع استفاده توسط ${customerName}`
-            : 'شروع استفاده',
-          time: new Date(session.start_time),
-          timeAgo: getTimeAgo(new Date(session.start_time)),
+        all.push({
+          id: `session-start-${session.id}`, type: 'device_start', title: deviceName,
+          description: session.customer_name ? `شروع استفاده توسط ${session.customer_name}` : 'شروع استفاده',
+          time: new Date(session.start_time), timeAgo: getTimeAgo(new Date(session.start_time)),
         });
-
-        // Session end (if completed)
         if (session.end_time && session.total_cost) {
-          const duration = Math.floor(
-            (new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / 1000 / 60
-          );
-          const hours = Math.floor(duration / 60);
-          const minutes = duration % 60;
-          const durationStr = hours > 0 
-            ? `${toPersianNumber(hours)} ساعت و ${toPersianNumber(minutes)} دقیقه` 
-            : `${toPersianNumber(minutes)} دقیقه`;
-
-          allActivities.push({
-            id: `session-end-${session.id}`,
-            type: 'device_end',
-            title: deviceName,
-            description: `پایان استفاده - ${durationStr} - ${toPersianNumber(session.total_cost)} ت`,
-            time: new Date(session.end_time),
-            timeAgo: getTimeAgo(new Date(session.end_time)),
+          const dur = Math.floor((new Date(session.end_time).getTime() - new Date(session.start_time).getTime()) / 60000);
+          const hrs = Math.floor(dur / 60), mins = dur % 60;
+          const durStr = hrs > 0 ? `${toFa(hrs)} ساعت و ${toFa(mins)} دقیقه` : `${toFa(mins)} دقیقه`;
+          all.push({
+            id: `session-end-${session.id}`, type: 'device_end', title: deviceName,
+            description: `پایان استفاده - ${durStr} - ${toFa(session.total_cost)} ت`,
+            time: new Date(session.end_time), timeAgo: getTimeAgo(new Date(session.end_time)),
           });
         }
       });
-
-      // Add sale activities
       salesData?.forEach(sale => {
-        const productName = (sale.products as any)?.name || 'محصول';
-        const deviceName = (sale.devices as any)?.name;
-        
-        allActivities.push({
-          id: `sale-${sale.id}`,
-          type: 'sale',
-          title: 'فروش بوفه',
-          description: deviceName
-            ? `${toPersianNumber(sale.quantity)} × ${productName} - ${deviceName}`
-            : `${toPersianNumber(sale.quantity)} × ${productName}`,
-          time: new Date(sale.created_at),
-          timeAgo: getTimeAgo(new Date(sale.created_at)),
+        const pName = (sale.products as any)?.name || 'محصول';
+        const dName = (sale.devices as any)?.name;
+        all.push({
+          id: `sale-${sale.id}`, type: 'sale', title: 'فروش بوفه',
+          description: dName ? `${toFa(sale.quantity)} × ${pName} - ${dName}` : `${toFa(sale.quantity)} × ${pName}`,
+          time: new Date(sale.created_at), timeAgo: getTimeAgo(new Date(sale.created_at)),
         });
       });
-
-      // Sort by time descending and take top 10
-      allActivities.sort((a, b) => b.time.getTime() - a.time.getTime());
-      setActivities(allActivities.slice(0, 10));
-
-    } catch (error) {
-      console.error('Error fetching activities:', error);
-    } finally {
-      setLoading(false);
-    }
-  }, [gameCenter?.id]);
+      all.sort((a, b) => b.time.getTime() - a.time.getTime());
+      setActivities(all.slice(0, 10));
+    } catch (e) {
+      console.error(e);
+    } finally { setLoading(false); }
+  }, [gameCenter?.id, isLocalMode]);
 
   useEffect(() => {
     fetchActivities();
-    
-    // Refresh every minute
-    const interval = setInterval(fetchActivities, 60000);
-    return () => clearInterval(interval);
+    const id = setInterval(fetchActivities, 60000);
+    return () => clearInterval(id);
   }, [fetchActivities]);
 
-  return {
-    activities,
-    loading,
-    refetch: fetchActivities,
-  };
+  return { activities, loading, refetch: fetchActivities };
 }

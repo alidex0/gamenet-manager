@@ -1,6 +1,16 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
+import {
+  isLocalMode as readIsLocalMode,
+  enableLocalMode as enableLocalModeStorage,
+  disableLocalMode,
+  getLocalUser,
+  getLocalGameCenter,
+  syncLocalToSupabase,
+  getSyncQueueSize,
+  clearLocalData,
+} from '@/lib/localBackend';
 
 interface GameCenter {
   id: string;
@@ -16,9 +26,13 @@ interface AuthContextType {
   loading: boolean;
   userRole: 'admin' | 'staff' | 'customer' | null;
   gameCenter: GameCenter | null;
+  isLocalMode: boolean;
   signUp: (email: string, password: string, fullName: string, gameCenterName?: string) => Promise<{ error: Error | null }>;
   signIn: (email: string, password: string) => Promise<{ error: Error | null }>;
   signOut: () => Promise<void>;
+  signInLocal: () => void;
+  syncLocalToCloud: () => Promise<{ ok: boolean; counts: any; error?: string }>;
+  pendingLocalChanges: number;
   isStaffOrAdmin: boolean;
 }
 
@@ -30,30 +44,37 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true);
   const [userRole, setUserRole] = useState<'admin' | 'staff' | 'customer' | null>(null);
   const [gameCenter, setGameCenter] = useState<GameCenter | null>(null);
+  const [isLocalMode, setIsLocalMode] = useState<boolean>(readIsLocalMode());
+  const [pendingLocalChanges, setPendingLocalChanges] = useState<number>(0);
 
+  // Bootstrap local mode immediately
   useEffect(() => {
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (event, session) => {
-        setSession(session);
-        setUser(session?.user ?? null);
-        
-        if (session?.user) {
-          setTimeout(() => {
-            fetchUserData(session.user.id);
-          }, 0);
-        } else {
-          setUserRole(null);
-          setGameCenter(null);
-        }
+    if (readIsLocalMode()) {
+      const lu = getLocalUser();
+      setUser({ id: lu.id, email: lu.email, user_metadata: lu.user_metadata } as any);
+      setGameCenter(getLocalGameCenter() as any);
+      setUserRole('admin');
+      setIsLocalMode(true);
+      setPendingLocalChanges(getSyncQueueSize());
+      setLoading(false);
+      return;
+    }
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, sess) => {
+      setSession(sess);
+      setUser(sess?.user ?? null);
+      if (sess?.user) {
+        setTimeout(() => fetchUserData(sess.user.id), 0);
+      } else {
+        setUserRole(null);
+        setGameCenter(null);
       }
-    );
+    });
 
     supabase.auth.getSession().then(({ data: { session } }) => {
       setSession(session);
       setUser(session?.user ?? null);
-      if (session?.user) {
-        fetchUserData(session.user.id);
-      }
+      if (session?.user) fetchUserData(session.user.id);
       setLoading(false);
     });
 
@@ -62,7 +83,6 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const fetchUserData = async (userId: string) => {
     try {
-      // Fetch user role with game_center_id
       const { data: roleData, error: roleError } = await supabase
         .from('user_roles')
         .select('role, game_center_id')
@@ -76,20 +96,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
       if (roleData) {
         setUserRole(roleData.role as 'admin' | 'staff' | 'customer');
-        
-        // Fetch game center info
         if (roleData.game_center_id) {
-          const { data: gcData, error: gcError } = await supabase
+          const { data: gcData } = await supabase
             .from('game_centers')
             .select('*')
             .eq('id', roleData.game_center_id)
             .maybeSingle();
-
-          if (gcError) {
-            console.error('Error fetching game center:', gcError);
-          } else if (gcData) {
-            setGameCenter(gcData);
-          }
+          if (gcData) setGameCenter(gcData);
         }
       }
     } catch (error) {
@@ -99,37 +112,67 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string, fullName: string, gameCenterName?: string) => {
     const redirectUrl = `${window.location.origin}/`;
-    
     const { error } = await supabase.auth.signUp({
       email,
       password,
       options: {
         emailRedirectTo: redirectUrl,
-        data: {
-          full_name: fullName,
-          game_center_name: gameCenterName || 'گیم نت من',
-        },
+        data: { full_name: fullName, game_center_name: gameCenterName || 'گیم نت من' },
       },
     });
-
     return { error: error as Error | null };
   };
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     return { error: error as Error | null };
   };
 
   const signOut = async () => {
+    if (isLocalMode) {
+      disableLocalMode();
+      setIsLocalMode(false);
+      setUser(null);
+      setGameCenter(null);
+      setUserRole(null);
+      return;
+    }
     await supabase.auth.signOut();
     setUser(null);
     setSession(null);
     setUserRole(null);
     setGameCenter(null);
+  };
+
+  const signInLocal = () => {
+    enableLocalModeStorage();
+    const lu = getLocalUser();
+    setUser({ id: lu.id, email: lu.email, user_metadata: lu.user_metadata } as any);
+    setGameCenter(getLocalGameCenter() as any);
+    setUserRole('admin');
+    setIsLocalMode(true);
+    setPendingLocalChanges(getSyncQueueSize());
+  };
+
+  const syncLocalToCloud = async () => {
+    const { data } = await supabase.auth.getUser();
+    if (!data.user) {
+      return { ok: false, counts: { devices: 0, products: 0, sessions: 0, sales: 0 }, error: 'ابتدا با حساب ابری وارد شوید' };
+    }
+    const { data: roleData } = await supabase
+      .from('user_roles')
+      .select('game_center_id')
+      .eq('user_id', data.user.id)
+      .maybeSingle();
+    if (!roleData?.game_center_id) {
+      return { ok: false, counts: { devices: 0, products: 0, sessions: 0, sales: 0 }, error: 'گیم نت ابری یافت نشد' };
+    }
+    const result = await syncLocalToSupabase(roleData.game_center_id, data.user.id);
+    if (result.ok) {
+      clearLocalData();
+      setPendingLocalChanges(0);
+    }
+    return result;
   };
 
   const isStaffOrAdmin = userRole === 'admin' || userRole === 'staff';
@@ -142,9 +185,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         loading,
         userRole,
         gameCenter,
+        isLocalMode,
         signUp,
         signIn,
         signOut,
+        signInLocal,
+        syncLocalToCloud,
+        pendingLocalChanges,
         isStaffOrAdmin,
       }}
     >
