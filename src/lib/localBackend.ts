@@ -77,31 +77,65 @@ const MODE_KEY = 'app_mode'; // 'local' | 'cloud' | unset
 const LOCAL_USER_ID = 'local-user-0001';
 const LOCAL_GAME_CENTER_ID = 'local-gc-0001';
 
-const KEYS = {
-  gameCenter: 'local_game_center',
-  devices: 'local_devices',
-  products: 'local_products',
-  sessions: 'local_device_sessions',
-  sales: 'local_sales',
-  syncQueue: 'local_sync_queue',
+const SUFFIX = {
+  gameCenter: 'game_center',
+  devices: 'devices',
+  products: 'products',
+  sessions: 'device_sessions',
+  sales: 'sales',
+  syncQueue: 'sync_queue',
 };
+
+// ============= Namespaces =============
+// The same local data engine serves two stores:
+//  - "local mode" (no account), keys prefixed `local_`
+//  - an offline mirror of a signed-in cloud user's game center, keys prefixed
+//    `cloud_<userId>_`, whose queued changes are replayed to the server later.
+interface Namespace {
+  prefix: string;
+  gameCenterId: string;
+  userId: string;
+  cloud: boolean;
+}
+
+const LOCAL_NS: Namespace = { prefix: 'local_', gameCenterId: LOCAL_GAME_CENTER_ID, userId: LOCAL_USER_ID, cloud: false };
+let ns: Namespace = LOCAL_NS;
+
+export function activateLocalNamespace() {
+  ns = LOCAL_NS;
+}
+
+export function activateCloudNamespace(userId: string, gameCenterId: string) {
+  ns = { prefix: `cloud_${userId}_`, gameCenterId, userId, cloud: true };
+}
+
+export function isCloudNamespace() {
+  return ns.cloud;
+}
+
+export function getNamespaceGameCenterId() {
+  return ns.gameCenterId;
+}
+
+const key = (suffix: string, space: Namespace = ns) => space.prefix + suffix;
 
 // ============= Helpers =============
 function uid(prefix = 'l') {
+  if (ns.cloud && typeof crypto !== 'undefined' && 'randomUUID' in crypto) return crypto.randomUUID();
   return `${prefix}_${Date.now().toString(36)}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-function read<T>(key: string, fallback: T): T {
+function read<T>(k: string, fallback: T): T {
   try {
-    const raw = localStorage.getItem(key);
+    const raw = localStorage.getItem(k);
     return raw ? (JSON.parse(raw) as T) : fallback;
   } catch {
     return fallback;
   }
 }
 
-function write<T>(key: string, value: T) {
-  localStorage.setItem(key, JSON.stringify(value));
+function write<T>(k: string, value: T) {
+  localStorage.setItem(k, JSON.stringify(value));
 }
 
 // ============= Mode =============
@@ -111,6 +145,7 @@ export function isLocalMode(): boolean {
 
 export function enableLocalMode() {
   localStorage.setItem(MODE_KEY, 'local');
+  activateLocalNamespace();
   seedIfEmpty();
 }
 
@@ -128,27 +163,35 @@ export function getLocalUser() {
 }
 
 export function getLocalGameCenter(): LocalGameCenter {
-  return read<LocalGameCenter>(KEYS.gameCenter, {
-    id: LOCAL_GAME_CENTER_ID,
-    name: 'گیم نت لوکال',
-    owner_id: LOCAL_USER_ID,
-    default_rates: { pc: 50000, playstation: 80000, billiard: 120000 },
-  });
+  const stored = read<Partial<LocalGameCenter> | null>(key(SUFFIX.gameCenter), null);
+  return {
+    id: ns.gameCenterId,
+    name: ns.cloud ? 'گیم نت' : 'گیم نت لوکال',
+    owner_id: ns.userId,
+    ...(stored || {}),
+    default_rates: (stored?.default_rates as LocalGameCenter['default_rates']) || { pc: 50000, playstation: 80000, billiard: 120000 },
+  } as LocalGameCenter;
+}
+
+/** Mirror a server game-center row without queueing a change. */
+export function setLocalGameCenterRow(row: any) {
+  write(key(SUFFIX.gameCenter), row);
 }
 
 export function updateLocalGameCenter(updates: Partial<LocalGameCenter>) {
   const current = getLocalGameCenter();
   const next = { ...current, ...updates };
-  write(KEYS.gameCenter, next);
+  write(key(SUFFIX.gameCenter), next);
+  enqueueSync({ type: 'gamecenter.update', payload: { id: current.id, updates } });
   return next;
 }
 
 // ============= Seed defaults =============
 function seedIfEmpty() {
-  if (!localStorage.getItem(KEYS.gameCenter)) {
-    write(KEYS.gameCenter, getLocalGameCenter());
+  if (!localStorage.getItem(key(SUFFIX.gameCenter))) {
+    write(key(SUFFIX.gameCenter), getLocalGameCenter());
   }
-  if (!localStorage.getItem(KEYS.devices)) {
+  if (!localStorage.getItem(key(SUFFIX.devices))) {
     const now = new Date().toISOString();
     const gc = LOCAL_GAME_CENTER_ID;
     const devices: LocalDevice[] = [
@@ -157,9 +200,9 @@ function seedIfEmpty() {
       { id: uid('d'), name: 'پلی‌استیشن ۱', type: 'playstation', status: 'available', hourly_rate: 80000, game_center_id: gc, created_at: now, updated_at: now },
       { id: uid('d'), name: 'بیلیارد ۱', type: 'billiard', status: 'available', hourly_rate: 120000, game_center_id: gc, created_at: now, updated_at: now },
     ];
-    write(KEYS.devices, devices);
+    write(key(SUFFIX.devices), devices);
   }
-  if (!localStorage.getItem(KEYS.products)) {
+  if (!localStorage.getItem(key(SUFFIX.products))) {
     const now = new Date().toISOString();
     const gc = LOCAL_GAME_CENTER_ID;
     const products: LocalProduct[] = [
@@ -167,26 +210,26 @@ function seedIfEmpty() {
       { id: uid('p'), name: 'چیپس', price: 25000, stock: 40, category: 'خوراکی', is_active: true, game_center_id: gc, created_at: now, updated_at: now },
       { id: uid('p'), name: 'آب معدنی', price: 8000, stock: 100, category: 'نوشیدنی', is_active: true, game_center_id: gc, created_at: now, updated_at: now },
     ];
-    write(KEYS.products, products);
+    write(key(SUFFIX.products), products);
   }
-  if (!localStorage.getItem(KEYS.sessions)) write(KEYS.sessions, []);
-  if (!localStorage.getItem(KEYS.sales)) write(KEYS.sales, []);
-  if (!localStorage.getItem(KEYS.syncQueue)) write(KEYS.syncQueue, []);
+  if (!localStorage.getItem(key(SUFFIX.sessions))) write(key(SUFFIX.sessions), []);
+  if (!localStorage.getItem(key(SUFFIX.sales))) write(key(SUFFIX.sales), []);
+  if (!localStorage.getItem(key(SUFFIX.syncQueue))) write(key(SUFFIX.syncQueue), []);
 }
 
 // ============= Devices =============
 export function getDevices(): LocalDevice[] {
-  return read<LocalDevice[]>(KEYS.devices, []);
+  return read<LocalDevice[]>(key(SUFFIX.devices), []);
 }
 export function setDevices(devices: LocalDevice[]) {
-  write(KEYS.devices, devices);
+  write(key(SUFFIX.devices), devices);
 }
 export function addLocalDevice(d: Omit<LocalDevice, 'id' | 'created_at' | 'updated_at' | 'game_center_id'>) {
   const now = new Date().toISOString();
   const device: LocalDevice = {
     ...d,
     id: uid('d'),
-    game_center_id: LOCAL_GAME_CENTER_ID,
+    game_center_id: ns.gameCenterId,
     created_at: now,
     updated_at: now,
   };
@@ -208,18 +251,18 @@ export function deleteLocalDevice(id: string) {
 
 // ============= Sessions =============
 export function getSessions(): LocalDeviceSession[] {
-  return read<LocalDeviceSession[]>(KEYS.sessions, []);
+  return read<LocalDeviceSession[]>(key(SUFFIX.sessions), []);
 }
 export function setSessions(sessions: LocalDeviceSession[]) {
-  write(KEYS.sessions, sessions);
+  write(key(SUFFIX.sessions), sessions);
 }
 export function startLocalSession(deviceId: string, customerName: string | null) {
   const now = new Date().toISOString();
   const session: LocalDeviceSession = {
     id: uid('s'),
     device_id: deviceId,
-    game_center_id: LOCAL_GAME_CENTER_ID,
-    user_id: LOCAL_USER_ID,
+    game_center_id: ns.gameCenterId,
+    user_id: ns.userId,
     customer_name: customerName,
     start_time: now,
     end_time: null,
@@ -230,8 +273,8 @@ export function startLocalSession(deviceId: string, customerName: string | null)
     created_at: now,
   };
   setSessions([...getSessions(), session]);
-  updateLocalDevice(deviceId, { status: 'occupied' });
   enqueueSync({ type: 'session.insert', payload: session });
+  updateLocalDevice(deviceId, { status: 'occupied' });
   return session;
 }
 export function updateLocalSession(id: string, updates: Partial<LocalDeviceSession>) {
@@ -241,10 +284,10 @@ export function updateLocalSession(id: string, updates: Partial<LocalDeviceSessi
 
 // ============= Products =============
 export function getProducts(): LocalProduct[] {
-  return read<LocalProduct[]>(KEYS.products, []);
+  return read<LocalProduct[]>(key(SUFFIX.products), []);
 }
 export function setProducts(products: LocalProduct[]) {
-  write(KEYS.products, products);
+  write(key(SUFFIX.products), products);
 }
 export function addLocalProduct(p: Omit<LocalProduct, 'id' | 'created_at' | 'updated_at' | 'is_active' | 'game_center_id'>) {
   const now = new Date().toISOString();
@@ -252,7 +295,7 @@ export function addLocalProduct(p: Omit<LocalProduct, 'id' | 'created_at' | 'upd
     ...p,
     id: uid('p'),
     is_active: true,
-    game_center_id: LOCAL_GAME_CENTER_ID,
+    game_center_id: ns.gameCenterId,
     created_at: now,
     updated_at: now,
   };
@@ -274,52 +317,85 @@ export function deleteLocalProduct(id: string) {
 
 // ============= Sales =============
 export function getSales(): LocalSale[] {
-  return read<LocalSale[]>(KEYS.sales, []);
+  return read<LocalSale[]>(key(SUFFIX.sales), []);
 }
 export function setSales(sales: LocalSale[]) {
-  write(KEYS.sales, sales);
+  write(key(SUFFIX.sales), sales);
 }
 export function addLocalSales(items: Omit<LocalSale, 'id' | 'created_at' | 'game_center_id' | 'sold_by'>[]) {
   const now = new Date().toISOString();
   const newSales: LocalSale[] = items.map(it => ({
     ...it,
     id: uid('sale'),
-    game_center_id: LOCAL_GAME_CENTER_ID,
-    sold_by: LOCAL_USER_ID,
+    game_center_id: ns.gameCenterId,
+    sold_by: ns.userId,
     created_at: now,
   }));
   setSales([...getSales(), ...newSales]);
+  newSales.forEach(s => enqueueSync({ type: 'sale.insert', payload: s }));
   // decrement stock
   const products = getProducts();
   for (const s of newSales) {
     if (!s.product_id) continue;
     const p = products.find(x => x.id === s.product_id);
-    if (p) p.stock = Math.max(0, p.stock - s.quantity);
+    if (p) {
+      p.stock = Math.max(0, p.stock - s.quantity);
+      enqueueSync({ type: 'product.update', payload: { id: p.id, updates: { stock: p.stock } } });
+    }
   }
   setProducts(products);
-  newSales.forEach(s => enqueueSync({ type: 'sale.insert', payload: s }));
   return newSales;
 }
 
 // ============= Sync queue =============
-interface SyncOp {
+export interface SyncOp {
   type: string;
   payload: any;
   ts: number;
 }
 
+export const QUEUE_EVENT = 'offline-queue-change';
+
+function notifyQueue() {
+  if (typeof window !== 'undefined') window.dispatchEvent(new Event(QUEUE_EVENT));
+}
+
 function enqueueSync(op: Omit<SyncOp, 'ts'>) {
-  const q = read<SyncOp[]>(KEYS.syncQueue, []);
+  const q = getSyncQueue();
   q.push({ ...op, ts: Date.now() });
-  write(KEYS.syncQueue, q);
+  write(key(SUFFIX.syncQueue), q);
+  notifyQueue();
+}
+
+export function getSyncQueue(): SyncOp[] {
+  return read<SyncOp[]>(key(SUFFIX.syncQueue), []);
+}
+
+export function setSyncQueue(ops: SyncOp[]) {
+  write(key(SUFFIX.syncQueue), ops);
+  notifyQueue();
 }
 
 export function getSyncQueueSize(): number {
-  return read<SyncOp[]>(KEYS.syncQueue, []).length;
+  return getSyncQueue().length;
+}
+
+/** Pending offline changes of a signed-in cloud user (independent of the active namespace). */
+export function getCloudQueueSize(userId: string): number {
+  return read<SyncOp[]>(`cloud_${userId}_${SUFFIX.syncQueue}`, []).length;
+}
+
+function readLocalNamespaceData() {
+  return {
+    devices: read<LocalDevice[]>(key(SUFFIX.devices, LOCAL_NS), []),
+    products: read<LocalProduct[]>(key(SUFFIX.products, LOCAL_NS), []),
+    sessions: read<LocalDeviceSession[]>(key(SUFFIX.sessions, LOCAL_NS), []),
+    sales: read<LocalSale[]>(key(SUFFIX.sales, LOCAL_NS), []),
+  };
 }
 
 export function clearLocalData() {
-  Object.values(KEYS).forEach(k => localStorage.removeItem(k));
+  Object.values(SUFFIX).forEach(s => localStorage.removeItem(key(s, LOCAL_NS)));
   disableLocalMode();
 }
 
@@ -338,8 +414,9 @@ export async function syncLocalToSupabase(gameCenterId: string, userId: string):
     const deviceIdMap = new Map<string, string>();
     const productIdMap = new Map<string, string>();
 
+    const { devices, products, sessions, sales } = readLocalNamespaceData();
+
     // Devices
-    const devices = getDevices();
     for (const d of devices) {
       const { data, error } = await supabase
         .from('devices')
@@ -359,7 +436,6 @@ export async function syncLocalToSupabase(gameCenterId: string, userId: string):
     }
 
     // Products
-    const products = getProducts();
     for (const p of products) {
       const { data, error } = await supabase
         .from('products')
@@ -380,7 +456,6 @@ export async function syncLocalToSupabase(gameCenterId: string, userId: string):
     }
 
     // Sessions
-    const sessions = getSessions();
     for (const s of sessions) {
       const remoteDeviceId = deviceIdMap.get(s.device_id);
       if (!remoteDeviceId) continue;
@@ -400,7 +475,6 @@ export async function syncLocalToSupabase(gameCenterId: string, userId: string):
     }
 
     // Sales
-    const sales = getSales();
     for (const sa of sales) {
       const remoteProductId = sa.product_id ? productIdMap.get(sa.product_id) : null;
       const remoteDeviceId = sa.device_id ? deviceIdMap.get(sa.device_id) : null;
